@@ -1,13 +1,15 @@
-.PHONY: all clean build
+.PHONY: all clean build test
 
-all: clean build
+all: clean test build
 
 clean:
-	(cd ./excel/cmd/example && go clean && rm -f output.xlsx)
-	(cd ./tui/cmd/list-simple && go clean)
-	(cd ./tui/cmd/title && go clean)
+	$(MAKE) -C ./excel clean
+	$(MAKE) -C ./tui clean
 
 build: 
-	(cd ./excel/cmd/example && go build)
-	(cd ./tui/cmd/list-simple && go build)
-	(cd ./tui/cmd/title && go build)
+	$(MAKE) -C ./excel build
+	$(MAKE) -C ./tui build
+
+test:
+	$(MAKE) -C ./excel test 
+	$(MAKE) -C ./tui test
