@@ -4,10 +4,12 @@ all:
 
 clean:
 	$(MAKE) -C ./cmd/example clean
+	$(MAKE) -C ./cmd/getinfo clean
 	rm -f cover.out cover.html ./testdata/output.xlsx
 
 build:
 	$(MAKE) -C ./cmd/example build
+	$(MAKE) -C ./cmd/getinfo build
 
 test:
 	go test -v -coverprofile=cover.out

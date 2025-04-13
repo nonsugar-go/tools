@@ -11,8 +11,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer func() {
+		if err := e.SaveAndClose(); err != nil {
+			log.Print(err)
+		}
+	}()
 	if err := e.NewSheet("WB シティの気温"); err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
 	rows := [][]any{
 		{"WB シティの気温"},
@@ -26,10 +31,7 @@ func main() {
 	}
 	for _, row := range rows {
 		if err := e.SetRow(&row); err != nil {
-			log.Fatal(err)
+			log.Print(err)
 		}
-	}
-	if err := e.SaveAndClose(); err != nil {
-		log.Fatal(err)
 	}
 }
