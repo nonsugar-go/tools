@@ -1,3 +1,4 @@
+//go:generate stringer -type SheetType -trimprefix SheetType
 package excel
 
 import (
@@ -7,9 +8,25 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// SheetType indicates the sheet type.
+type SheetType int
+
+const (
+	SheetTypeUnknown SheetType = iota
+	SheetTypeNormal
+	SheetTypeTOC
+	SheetTypeCover
+)
+
 const (
 	defaultSheet = "Sheet1"
 	defaultFont  = "游ゴシック"
+)
+
+var (
+	codeName      = ""
+	date1094      = false
+	filterPrivacy = false
 )
 
 // Excel is a struct that manipulates Excel workbooks.
@@ -22,15 +39,33 @@ type Excel struct {
 }
 
 // NewExcel returns a pointer to Excel.
-func NewExcel(book string) (*Excel, error) {
+func NewExcel(book string, typ ...SheetType) (*Excel, error) {
 	e := &Excel{
 		f:    excelize.NewFile(),
 		book: book,
 		Col:  1,
 		Row:  1,
 	}
-	err := e.f.SetDefaultFont(defaultFont)
-	return e, err
+	if err := e.f.SetDefaultFont(defaultFont); err != nil {
+		return nil, err
+	}
+	if err := e.f.SetWorkbookProps(&excelize.WorkbookPropsOptions{
+		Date1904:      &date1094,
+		FilterPrivacy: &filterPrivacy,
+		CodeName:      &codeName,
+	}); err != nil {
+		return nil, err
+	}
+	sheetType := SheetTypeUnknown
+	if len(typ) > 0 {
+		sheetType = typ[0]
+	}
+	switch sheetType {
+	case SheetTypeNormal:
+	case SheetTypeTOC:
+	case SheetTypeCover:
+	}
+	return e, nil
 }
 
 // OpenExcel opens Excel workbooks

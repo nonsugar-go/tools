@@ -97,3 +97,51 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		t.Errorf("AddTable: want no error, but %v", err)
 	}
 }
+
+func Test_ColumnNumberToName(t *testing.T) {
+	tests := []struct {
+		name   string
+		colNum int
+		expect string
+		isErr  bool
+	}{
+		{"col number is 5", 5, "E", false},
+		{"col number is 6", 6, "F", false},
+		{"col number is 0", 0, "", true},
+		{"col number is -1", -1, "", true},
+	}
+
+	for _, tt := range tests {
+		got, err := ColumnNumberToName(tt.colNum)
+		if !tt.isErr && err != nil {
+			t.Errorf("%s: want no error, but %v", tt.name, err)
+		}
+		if got != tt.expect {
+			t.Errorf("%s: want %s, but %s", tt.name, tt.expect, got)
+		}
+	}
+}
+
+func Test_CordinatesToCellName(t *testing.T) {
+	tests := []struct {
+		name     string
+		col, row int
+		abs      bool
+		expect   string
+		isErr    bool
+	}{
+		{"col: 1, row: 2", 1, 2, false, "A2", false},
+		{"col: 3, row: 1", 3, 1, true, "$C$1", false},
+		{"col: 0, row: 1", 0, 1, false, "", true},
+	}
+
+	for _, tt := range tests {
+		got, err := CordinatesToCellName(tt.col, tt.row, tt.abs)
+		if !tt.isErr && err != nil {
+			t.Errorf("%s: want no error, but %v", tt.name, err)
+		}
+		if got != tt.expect {
+			t.Errorf("%s: want %s, but %s", tt.name, tt.expect, got)
+		}
+	}
+}

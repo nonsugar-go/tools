@@ -8,6 +8,7 @@ clean:
 	rm -f cover.out cover.html ./testdata/output.xlsx
 
 build:
+	go generate
 	$(MAKE) -C ./cmd/example build
 	$(MAKE) -C ./cmd/getinfo build
 
