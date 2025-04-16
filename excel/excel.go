@@ -19,27 +19,34 @@ const (
 )
 
 const (
-	defaultSheet = "Sheet1"
-	defaultFont  = "游ゴシック"
+	defaultSheet string = "Sheet1"
+	defaultFont  string = "游ゴシック"
 )
 
 var (
-	codeName      = ""
-	date1094      = false
-	filterPrivacy = false
+	codeName         string  = ""
+	date1094         bool    = false
+	filterPrivacy    bool    = false
+	boolTrue         bool    = true
+	boolFalse        bool    = false
+	int0x0           int     = 0x0
+	uint80x0         uint8   = 0x0
+	defaultColWidth  float64 = 2.69921875
+	defaultRowHeight float64 = 13.5
 )
 
 // Excel is a struct that manipulates Excel workbooks.
 type Excel struct {
-	f     *excelize.File
-	book  string
-	sheet string
+	f         *excelize.File
+	book      string
+	sheet     string
+	sheetType SheetType
 	// Current column and Row number
 	Col, Row int
 }
 
 // NewExcel returns a pointer to Excel.
-func NewExcel(book string, typ ...SheetType) (*Excel, error) {
+func NewExcel(book string) (*Excel, error) {
 	e := &Excel{
 		f:    excelize.NewFile(),
 		book: book,
@@ -50,20 +57,11 @@ func NewExcel(book string, typ ...SheetType) (*Excel, error) {
 		return nil, err
 	}
 	if err := e.f.SetWorkbookProps(&excelize.WorkbookPropsOptions{
+		CodeName:      &codeName,
 		Date1904:      &date1094,
 		FilterPrivacy: &filterPrivacy,
-		CodeName:      &codeName,
 	}); err != nil {
 		return nil, err
-	}
-	sheetType := SheetTypeUnknown
-	if len(typ) > 0 {
-		sheetType = typ[0]
-	}
-	switch sheetType {
-	case SheetTypeNormal:
-	case SheetTypeTOC:
-	case SheetTypeCover:
 	}
 	return e, nil
 }
@@ -118,12 +116,71 @@ func (e *Excel) SaveAndClose() error {
 }
 
 // NewSheet creates a new worksheet.
-func (e *Excel) NewSheet(sheet string) error {
+func (e *Excel) NewSheet(sheet string, typ ...SheetType) error {
 	_, err := e.f.NewSheet(sheet)
 	if err != nil {
 		return fmt.Errorf(
 			"cannot add the sheet: %s: %w",
 			sheet, err)
+	}
+	e.sheet = sheet
+	sheetType := SheetTypeUnknown
+	if len(typ) > 0 {
+		sheetType = typ[0]
+	}
+	e.sheetType = sheetType
+	switch sheetType {
+	case SheetTypeNormal:
+		fallthrough
+	case SheetTypeTOC:
+		fallthrough
+	case SheetTypeCover:
+		if err := e.f.SetSheetProps(
+			e.sheet,
+			&excelize.SheetPropsOptions{
+				AutoPageBreaks:                    &boolTrue,
+				BaseColWidth:                      &uint80x0,
+				CodeName:                          (*string)(nil),
+				CustomHeight:                      &boolTrue,
+				DefaultColWidth:                   &defaultColWidth,
+				DefaultRowHeight:                  &defaultRowHeight,
+				EnableFormatConditionsCalculation: &boolTrue,
+				FitToPage:                         (*bool)(nil),
+				OutlineSummaryBelow:               &boolTrue,
+				OutlineSummaryRight:               (*bool)(nil),
+				Published:                         &boolTrue,
+				TabColorIndexed:                   (*int)(nil),
+				TabColorRGB:                       (*string)(nil),
+				TabColorTheme:                     (*int)(nil),
+				TabColorTint:                      (*float64)(nil),
+				ThickBottom:                       &boolFalse,
+				ThickTop:                          &boolFalse,
+				ZeroHeight:                        &boolFalse,
+			},
+			/*
+				AutoPageBreak                      true
+				BaseColWidth                       0x0
+				CodeName                           (*string)(nil)
+				CustomHeight                       true
+				DefaultColWidth                    2.69921875
+				DefaultRowHeight                   13.5
+				EnableFormatConditionsCalculation  true
+				FitToPage                          (*bool)(nil)
+				OutlineSummaryBelow                true
+				OutlineSummaryRight                (*bool)(nil)
+				Published                          true
+				TabColorIndexed                    (*int)(nil)
+				TabColorRGB                        (*string)(nil)
+				TabColorTheme                      (*int)(nil)
+				TabColorTint                       (*float64)(nil)
+				ThickBottom                        false
+				ThickTop                           false
+				ZeroHeight                         false
+			*/
+		); err != nil {
+			return fmt.Errorf("cannot set sheet props: %s: %w",
+				sheet, err)
+		}
 	}
 	if e.sheet == "" {
 		if err := e.f.DeleteSheet(defaultSheet); err != nil {
@@ -132,7 +189,6 @@ func (e *Excel) NewSheet(sheet string) error {
 				sheet, err)
 		}
 	}
-	e.sheet = sheet
 	return nil
 }
 

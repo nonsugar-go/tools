@@ -96,6 +96,12 @@ func TestExcel_SaveAndClose(t *testing.T) {
 	if err := e.AddTable("Table1"); err != nil {
 		t.Errorf("AddTable: want no error, but %v", err)
 	}
+	if err := e.NewSheet("目次", SheetTypeTOC); err != nil {
+		t.Errorf("NewSheet: want no error, but: %v", err)
+	}
+	if err := e.NewSheet("標準", SheetTypeNormal); err != nil {
+		t.Errorf("NewSheet: want no error, but: %v", err)
+	}
 }
 
 func Test_ColumnNumberToName(t *testing.T) {
