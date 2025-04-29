@@ -13,9 +13,9 @@ import (
 
 func main() {
 	var (
-		filename                       string
-		sheetIdx                       int
-		colMin, colMax, rowMin, rowMax int
+		filename                                         string
+		sheetIdx                                         int
+		colMin, colMax, rowMin, rowMax, cellCol, cellRow int
 	)
 	flag.StringVar(&filename, "in", "", "Excel ファイル (*.xlsx)")
 	flag.IntVar(&sheetIdx, "sheet", 0, "sheet index")
@@ -23,6 +23,8 @@ func main() {
 	flag.IntVar(&colMax, "col-max", 8, "column max number")
 	flag.IntVar(&rowMin, "row-min", 1, "row min number")
 	flag.IntVar(&rowMax, "row-max", 8, "row max number")
+	flag.IntVar(&cellCol, "col", 1, "cell col number")
+	flag.IntVar(&cellRow, "row", 1, "cell row number")
 	flag.Parse()
 	if filename == "" {
 		log.Print("Excel ファイルが指定されていません")
@@ -40,6 +42,7 @@ func main() {
 	}()
 	f := e.GetFile()
 	var s string
+
 	fmt.Println(strings.Repeat("-", 72))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	s, _ = f.GetDefaultFont()
@@ -64,6 +67,7 @@ func main() {
 		)
 	}
 	w.Flush()
+
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Println("[SHEET LIST]")
 	fmt.Fprint(w, "IDX\tSHEET NAME\t\n")
@@ -75,6 +79,7 @@ func main() {
 		fmt.Fprintf(w, "%d\t%s\t\n", i, sheet)
 	}
 	w.Flush()
+
 	fmt.Println(strings.Repeat("-", 72))
 	sheet := f.GetSheetName(sheetIdx)
 	fmt.Printf("[SHEET PROPS:%s]\n", sheet)
@@ -100,6 +105,7 @@ func main() {
 	fmt.Fprintf(w, "ThickTop\t%#v\t\n", *shProps.ThickTop)
 	fmt.Fprintf(w, "ZeroHeight\t%#v\t\n", *shProps.ZeroHeight)
 	w.Flush()
+
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[PAGE LAYOUT:%s]\n", sheet)
 	pageLayout, _ := f.GetPageLayout(sheet)
@@ -111,6 +117,7 @@ func main() {
 	fmt.Fprintf(w, "Orientation\t%#v\t\n", *pageLayout.Orientation)
 	fmt.Fprintf(w, "Size\t%#v\t\n", *pageLayout.Size)
 	w.Flush()
+
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[PAGE MARGINS:%s]\n", sheet)
 	pageMargins, _ := f.GetPageMargins(sheet)
@@ -123,6 +130,7 @@ func main() {
 	fmt.Fprintf(w, "Top\t%#v\t\n", *pageMargins.Top)
 	fmt.Fprintf(w, "Vertically\t%#v\t\n", pageMargins.Vertically)
 	w.Flush()
+
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[HEADER FOOTER:%s]\n", sheet)
 	headerFooter, _ := f.GetHeaderFooter(sheet)
@@ -137,6 +145,7 @@ func main() {
 	fmt.Fprintf(w, "OddHeader\t%#v\t\n", headerFooter.OddHeader)
 	fmt.Fprintf(w, "ScaleWithDoc\t%#v\t\n", headerFooter.ScaleWithDoc)
 	w.Flush()
+
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[COLUMNS:%s]\n", sheet)
 	fmt.Fprint(w, "COL\tVISIBLE\tWIDTH\t\n")
@@ -147,6 +156,7 @@ func main() {
 		fmt.Fprintf(w, "%s\t%#v\t%#v\t\n", colName, colVisible, colWidth)
 	}
 	w.Flush()
+
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[ROWS:%s]\n", sheet)
 	fmt.Fprint(w, "ROW\tVISIBLE\tHEIGHT\t\n")
@@ -156,5 +166,58 @@ func main() {
 		fmt.Fprintf(w, "%d\t%#v\t%#v\t\n", row, rowVisible, rowHeight)
 	}
 	w.Flush()
+
+	/*
+		fmt.Println(strings.Repeat("-", 72))
+		fmt.Printf("[COMMENTS:%s]\n", sheet)
+		fmt.Fprint(w, "IDX\tCOMMENT\t\n")
+		comments, _ := f.GetComments(sheet)
+		for i, comment := range comments {
+			fmt.Fprintf(w, "%d\t%#v\t\n",
+				i,
+				comment,
+			)
+		}
+	*/
+
 	fmt.Println(strings.Repeat("-", 72))
+	fmt.Printf("[COMMENTS:%s]\n", sheet)
+	fmt.Fprint(w,
+		"IDX\tAUTHOR\tAUTHOR ID\tCELL\tTEXT\tWIDTH\tHEIGHT\tPARAGRAPH FONT\tPARAGRAPH TEXT\t\n")
+	comments2, _ := f.GetComments(sheet)
+	for i, comment := range comments2 {
+		paragraph := comment.Paragraph[0]
+		fmt.Fprintf(w, "%d\t%#v\t%#v\t%#v\t%#v\t%#v\t%#v\t%#v\t%#v\t\n",
+			i,
+			comment.Author,
+			comment.AuthorID,
+			comment.Cell,
+			comment.Text,
+			comment.Width,
+			comment.Height,
+			*paragraph.Font,
+			paragraph.Text,
+		)
+	}
+	w.Flush()
+
+	fmt.Println(strings.Repeat("-", 72))
+	fmt.Printf("[CELL:%s!R%dC%d]\n", sheet, cellRow, cellCol)
+	fmt.Fprint(w,
+		"VALUE\tTYPE\tHYPER LINK\tSTYLE\t\n")
+	cell, _ := excel.CordinatesToCellName(cellCol, cellRow)
+	value, _ := f.GetCellValue(sheet, cell)
+	cellType, _ := f.GetCellType(sheet, cell)
+	_, hlink, _ := f.GetCellHyperLink(sheet, cell)
+	styleIdx, _ := f.GetCellStyle(sheet, cell)
+	fmt.Fprintf(w, "%s\t%v\t%s\t%d\t\n", value, CellType(cellType), hlink, styleIdx)
+	w.Flush()
+
+	fmt.Println(strings.Repeat("-", 72))
+	fmt.Printf("[CELL STYLE(%d):%s!R%dC%d]\n", styleIdx, sheet, cellRow, cellCol)
+	fmt.Fprint(w,
+		"STYLE\t\n")
+	style, _ := f.GetStyle(styleIdx)
+	fmt.Fprintf(w, "%#v\t\n", *style)
+	w.Flush()
 }
