@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -11,7 +11,20 @@ import (
 	"github.com/nonsugar-go/tools/excel"
 )
 
+const logFilename = "getinfo.log"
+
 func main() {
+	logFile, err := os.OpenFile(logFilename,
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer logFile.Close()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(logFile,
+		&slog.HandlerOptions{
+			AddSource: true,
+		})))
+
 	var (
 		filename                                         string
 		sheetIdx                                         int
@@ -27,17 +40,19 @@ func main() {
 	flag.IntVar(&cellRow, "row", 1, "cell row number")
 	flag.Parse()
 	if filename == "" {
-		log.Print("Excel ファイルが指定されていません")
+		slog.Error("Excel ファイルが指定されていません")
+		fmt.Printf("Excel ファイルが指定されていません")
 		os.Exit(1)
 	}
 	e, err := excel.OpenExcel(filename)
 	if err != nil {
-		log.Printf("Excel ファイルが開けません: %v", err)
+		slog.Error("Excel ファイルが開けません", "error", err)
+		fmt.Printf("Excel ファイルが開けません")
 		os.Exit(1)
 	}
 	defer func() {
 		if err := e.Close(); err != nil {
-			log.Print(err)
+			slog.Error("Excel ファイルが閉じられません", "error", err)
 		}
 	}()
 	f := e.GetFile()
@@ -74,7 +89,7 @@ func main() {
 	for _, sheet := range f.GetSheetList() {
 		i, err := f.GetSheetIndex(sheet)
 		if err != nil {
-			log.Println(err)
+			slog.Error("GetSheetIndex", "error", err)
 		}
 		fmt.Fprintf(w, "%d\t%s\t\n", i, sheet)
 	}

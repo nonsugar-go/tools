@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	e, err := excel.NewExcel("output.xlsx")
+	e, err := excel.New("output.xlsx")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -17,6 +17,12 @@ func main() {
 		}
 	}()
 	if err := e.NewSheet("WB シティの気温"); err != nil {
+		log.Print(err)
+	}
+	if err := e.SetVal("WB シティの気温"); err != nil {
+		log.Print(err)
+	}
+	if err := e.SetCellStyle(excel.NewStyle().Bold()); err != nil {
 		log.Print(err)
 	}
 	rows := [][]any{
@@ -29,8 +35,9 @@ func main() {
 		{4, 12.8},
 		{5, 14.9},
 	}
+	e.LF()
 	for _, row := range rows {
-		if err := e.SetRow(&row); err != nil {
+		if err := e.LF().SetRow(&row); err != nil {
 			log.Print(err)
 		}
 	}
