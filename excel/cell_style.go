@@ -14,6 +14,14 @@ const (
 	cellStyleNormal cellStyle = 0
 	cellStyleBold             = 1 << iota
 
+	// Fill color styles
+	fillGray1     // 16 灰1 (&H808080)
+	fillGray2     // 48 灰2 (&H969696)
+	fillGray3     // 15 灰3 (&HC0C0C0)
+	fillPink      // 26 (ピンク) CAUTION
+	fillYellow    // 27 (黄色) NOTE
+	fillLightBlue // 28 (薄い青) HINT
+
 	// Thin border styles
 	bT // thin border top
 	bL // thin border left
@@ -59,7 +67,38 @@ func (e *Excel) SetCellStyle(cell string, style cellStyle) error {
 	// Font
 	var font excelize.Font
 	if style&cellStyleBold != 0 {
-		font.Bold = true
+		font = excelize.Font{Size: e.fontSize, Bold: true}
+	}
+
+	// Fill
+	var fill excelize.Fill
+	// Fill: excelize.Fill{Type: "pattern",
+	// 	Color:   []string{"E0EBF5"},
+	// 	Pattern: 1},
+	// Ref: https://nako-itnote.com/excel-colorindex-rgb/
+	if style&fillGray1 != 0 { // 灰1
+		fill = excelize.Fill{
+			Type: "pattern", Color: []string{"808080"}, Pattern: 1}
+	}
+	if style&fillGray2 != 0 { // 灰2
+		fill = excelize.Fill{
+			Type: "pattern", Color: []string{"969696"}, Pattern: 1}
+	}
+	if style&fillGray3 != 0 { // 灰3
+		fill = excelize.Fill{
+			Type: "pattern", Color: []string{"C0C0C0"}, Pattern: 1}
+	}
+	if style&fillPink != 0 { // 26 ピンク
+		fill = excelize.Fill{
+			Type: "pattern", Color: []string{"FF00FF"}, Pattern: 1}
+	}
+	if style&fillYellow != 0 { // 27 黄色
+		fill = excelize.Fill{
+			Type: "pattern", Color: []string{"FFFF00"}, Pattern: 1}
+	}
+	if style&fillLightBlue != 0 { // 28 薄い青
+		fill = excelize.Fill{
+			Type: "pattern", Color: []string{"#00FFFF"}, Pattern: 1}
 	}
 
 	// Border
@@ -104,6 +143,7 @@ func (e *Excel) SetCellStyle(cell string, style cellStyle) error {
 	id, err := e.f.NewStyle(
 		&excelize.Style{
 			Font:   &font,
+			Fill:   fill,
 			Border: border,
 		})
 	if err != nil {

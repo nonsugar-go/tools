@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	e, err := excel.New("output.xlsx")
+	e, err := excel.New("output.xlsx", 11)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func main() {
 	if err := e.SetVal("WB シティの気温"); err != nil {
 		log.Print(err)
 	}
-	if err := e.SetCellStyle(excel.NewStyle().Bold()); err != nil {
+	if err := e.SetCellStyleForCurrentCell(excel.NewStyle().Bold()); err != nil {
 		log.Print(err)
 	}
 	rows := [][]any{

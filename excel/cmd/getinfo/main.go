@@ -220,7 +220,7 @@ func main() {
 	fmt.Printf("[CELL:%s!R%dC%d]\n", sheet, cellRow, cellCol)
 	fmt.Fprint(w,
 		"VALUE\tTYPE\tHYPER LINK\tSTYLE\t\n")
-	cell, _ := excel.CordinatesToCellName(cellCol, cellRow)
+	cell, _ := excel.CoordinatesToCellName(cellCol, cellRow)
 	value, _ := f.GetCellValue(sheet, cell)
 	cellType, _ := f.GetCellType(sheet, cell)
 	_, hlink, _ := f.GetCellHyperLink(sheet, cell)

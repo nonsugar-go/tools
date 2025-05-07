@@ -2,7 +2,9 @@
 package excel
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/mattn/go-runewidth"
@@ -22,6 +24,8 @@ const (
 const (
 	defaultSheet string = "Sheet1"
 	defaultFont  string = "游ゴシック"
+	// defaultFontSize float64 = 11.0
+	defaultFontSize float64 = 10.0
 )
 
 var (
@@ -47,28 +51,46 @@ type Excel struct {
 	Col, Row int
 
 	// Cell Sytle
+	fontSize     float64
 	cellStyleIDs map[cellStyle]int
 	cellStyleMap map[string]cellStyle // cellStyleMap["A1"] = CellStyleBold
 }
 
-// New returns a pointer to Excel.
-func New(book string) (*Excel, error) {
+// New creates an Excel instance with the given filename.
+// Optionally sets a default font size.
+func New(book string, fontSize ...float64) (*Excel, error) {
 	e := &Excel{
 		f:            excelize.NewFile(),
 		book:         book,
 		Col:          1,
 		Row:          1,
+		fontSize:     defaultFontSize,
 		cellStyleIDs: make(map[cellStyle]int),
 	}
-	if err := e.f.SetDefaultFont(defaultFont); err != nil {
-		return nil, err
+	if len(fontSize) > 0 {
+		size := fontSize[0]
+		if size < 1 || size > 409 || math.Mod(size*10, 5) != 0 {
+			// 1 から 409、1 から 409 の間、.5 の倍数 (10.5 や 105.5 など)
+			_ = e.f.Close()
+			return nil, errors.New(
+				"font size must be between 1 and 409, and a multiple of 0.5.")
+		}
+		e.fontSize = size
+	}
+	// if err := e.f.SetDefaultFont(defaultFont); err != nil {
+	// return nil, fmt.Errorf("failed to set default font: %w", err)
+	// }
+	if err := e.f.SetDefaultFontAndSize(defaultFont, e.fontSize); err != nil {
+		_ = e.f.Close()
+		return nil, fmt.Errorf("failed to set default font and size: %w", err)
 	}
 	if err := e.f.SetWorkbookProps(&excelize.WorkbookPropsOptions{
 		CodeName:      &codeName,
 		Date1904:      &date1094,
 		FilterPrivacy: &filterPrivacy,
 	}); err != nil {
-		return nil, err
+		_ = e.f.Close()
+		return nil, fmt.Errorf("failed to apply workbook properties: %w", err)
 	}
 	return e, nil
 }
@@ -77,9 +99,7 @@ func New(book string) (*Excel, error) {
 func OpenExcel(book string) (*Excel, error) {
 	f, err := excelize.OpenFile(book)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"cannot open file: %s, %w",
-			book, err)
+		return nil, fmt.Errorf("cannot open file: %s, %w", book, err)
 	}
 	e := &Excel{
 		f:    f,
@@ -101,9 +121,7 @@ func (e *Excel) Close() error {
 		return nil
 	}
 	if err := e.f.Close(); err != nil {
-		return fmt.Errorf(
-			"cannot close excel: %s: %w",
-			e.book, err)
+		return fmt.Errorf("failedto close Excel file '%s': %w", e.book, err)
 	}
 	e.f = nil
 	return nil

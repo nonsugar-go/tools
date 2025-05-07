@@ -28,7 +28,7 @@ const (
 	sa3MaxRightRow  = "109"
 	// defaultFont = "ＭＳ Ｐゴシック" // デフォルトのフォント
 	// defaultFont          = "游ゴシック"   // デフォルトのフォント
-	defaultFontSize      = 10        // デフォルトのフォントサイズ
+	// defaultFontSize      = 10        // デフォルトのフォントサイズ
 	ttFont               = "ＭＳ ゴシック" // コード用(TeleType)のフォント
 	ttFontSize           = 10        // コード用(TeleType)のフォントサイズ
 	ttRowHeight          = 13.5      // コード用(TeleType)の行間

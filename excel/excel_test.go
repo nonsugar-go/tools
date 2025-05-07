@@ -11,15 +11,34 @@ import (
 func TestExcel_NewExcel(t *testing.T) {
 	dir := t.TempDir()
 	filename := filepath.Join(dir, "Book1.xlsx")
-	e, err := New(filename)
-	if err != nil {
-		t.Fatalf("NewExcel: want no error, but %v", err)
+	tests := []struct {
+		name     string
+		fontSize float64
+		ok       bool
+	}{
+		{"size=11", 11, true},
+		{"size=10", 10, true},
+		{"size=409", 409, true},
+		{"size=10.5", 10.5, true},
+		{"size=10.4", 10.4, false},
+		{"size=409.5", 409.5, false},
+		{"size=0", 0, false},
+		{"size=0", -1, false},
 	}
-	defer func() {
-		if err := e.Close(); err != nil {
-			t.Errorf("Close: want no error, but %v", err)
+	for _, tt := range tests {
+		e, err := New(filename, tt.fontSize)
+		if tt.ok && err != nil {
+			t.Errorf("NewExcel: want no error, but %v", err)
 		}
-	}()
+		if !tt.ok && err == nil {
+			t.Errorf("NewExcel: want error, but %v", err)
+		}
+		if e != nil {
+			if err := e.Close(); err != nil {
+				t.Errorf("Close: want no error, but %v", err)
+			}
+		}
+	}
 }
 
 func TestExcel_OpenExcel(t *testing.T) {
@@ -229,6 +248,34 @@ func TestExcel_SaveAndClose(t *testing.T) {
 	if err := e.LF().SetRow(&[]any{
 		"cellStyleMap", nil, nil, nil, nil, e.cellStyleMap}); err != nil {
 		t.Errorf("SetRow: want no error, but: %v", err)
+	}
+	e.CR().LF(3)
+	if err := e.SetVal("背景の例"); err != nil {
+		t.Errorf("SetVal: want no error, but: %v", err)
+	}
+	if err := e.MarkHeader(1); err != nil {
+		t.Errorf("MarkHeader: want no error, but: %v", err)
+	}
+	e.CR(2).LF()
+	for _, bg := range []struct {
+		name  string
+		style cellStyle
+	}{
+		{"灰色1", fillGray1},
+		{"灰色2", fillGray2},
+		{"灰色3", fillGray3},
+		{"ピンク", fillPink},
+		{"黄色", fillYellow},
+		{"薄い青", fillLightBlue},
+	} {
+		if err := e.LF().SetVal(bg.name); err != nil {
+			t.Errorf("SetVal: want no error, but: %v", err)
+		}
+		if err := e.SetCellStyleForCurrentCell(
+			NewStyle().Add(bg.style),
+		); err != nil {
+			t.Errorf("SetCellStyleForCurrentCell: want no error, but: %v", err)
+		}
 	}
 	e.CR().LF(3)
 	if err := e.SetVal("コメントの一覧"); err != nil {
