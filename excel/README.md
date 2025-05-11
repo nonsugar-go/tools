@@ -6,7 +6,7 @@
 ## vendor フォルダー
 
 ```bash
-go mod vendor // or go work vendor
+go mod vendor // OR go work vendor
 cd vendor/github.com/xuri/excelize/v2
 cp styles.go{,.orig}
 vi styles.go
@@ -14,23 +14,13 @@ vi styles.go
 
 ```
 diff styles.go.orig styles.go
-1809a1810,1826
-> // SetDefaultFontAndSize changes the default font in the workbook.
-> func (f *File) SetDefaultFontAndSize(fontName string, fontSize float64) error {
-> 	font, err := f.readDefaultFont()
-> 	if err != nil {
-> 		return err
-> 	}
-> 	font.Name.Val = stringPtr(fontName)
-> 	font.Sz.Val = &fontSize
-> 	f.mu.Lock()
-> 	s, _ := f.stylesReader()
-> 	f.mu.Unlock()
-> 	s.Fonts.Font[0] = font
-> 	custom := true
-> 	s.CellStyles.CellStyle[0].CustomBuiltIn = &custom
-> 	return err
-> }
-> 
+1795c1795
+< func (f *File) SetDefaultFont(fontName string) error {
+---
+> func (f *File) SetDefaultFont(fontName string, fontSize ...float64) error {
+1800a1801,1803
+>       if len(fontSize) > 0 {
+>               font.Sz.Val = float64Ptr(fontSize[0])
+>       }
 ```
 

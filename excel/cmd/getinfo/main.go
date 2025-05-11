@@ -64,7 +64,12 @@ func main() {
 	fmt.Println("[WORKBOOK PROPS]")
 	fmt.Fprint(w, "KEY\tVALUE\t\n")
 	fmt.Fprintf(w, "Default Font\t%s\t\n", s)
-	wbProps, _ := f.GetWorkbookProps()
+	wbProps, err := f.GetWorkbookProps()
+	if err != nil {
+		slog.Error("workbook props が取得できません", "error", err)
+		fmt.Printf("workbook props が取得できません: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Fprintf(w, "CodeName\t%#v\t\n", *wbProps.CodeName)
 	fmt.Fprintf(w, "Date1094\t%#v\t\n", *wbProps.Date1904)
 	fmt.Fprintf(w, "FilterPrivacy\t%#v\t\n", *wbProps.FilterPrivacy)
@@ -89,7 +94,9 @@ func main() {
 	for _, sheet := range f.GetSheetList() {
 		i, err := f.GetSheetIndex(sheet)
 		if err != nil {
-			slog.Error("GetSheetIndex", "error", err)
+			slog.Error("sheet index が取得できません", "error", err)
+			fmt.Printf("sheet index が取得できません: %v\n", err)
+			os.Exit(1)
 		}
 		fmt.Fprintf(w, "%d\t%s\t\n", i, sheet)
 	}
@@ -99,13 +106,30 @@ func main() {
 	sheet := f.GetSheetName(sheetIdx)
 	fmt.Printf("[SHEET PROPS:%s]\n", sheet)
 	fmt.Fprint(w, "KEY\tVALUE\t\n")
-	shProps, _ := f.GetSheetProps(sheet)
+	shProps, err := f.GetSheetProps(sheet)
+	if err != nil {
+		slog.Error("sheet props が取得できません", "error", err)
+		fmt.Printf("sheet props が取得できません: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Fprintf(w, "AutoPageBreak\t%#v\t\n", *shProps.AutoPageBreaks)
 	fmt.Fprintf(w, "BaseColWidth\t%#v\t\n", *shProps.BaseColWidth)
 	fmt.Fprintf(w, "CodeName\t%#v\t\n", shProps.CodeName)
-	fmt.Fprintf(w, "CustomHeight\t%#v\t\n", *shProps.CustomHeight)
-	fmt.Fprintf(w, "DefaultColWidth\t%#v\t\n", *shProps.DefaultColWidth)
-	fmt.Fprintf(w, "DefaultRowHeight\t%#v\t\n", *shProps.DefaultRowHeight)
+	if shProps.CustomHeight == nil {
+		fmt.Fprintf(w, "CustomHeight\t%#v\t\n", shProps.CustomHeight)
+	} else {
+		fmt.Fprintf(w, "CustomHeight\t%#v\t\n", *shProps.CustomHeight)
+	}
+	if shProps.DefaultColWidth == nil {
+		fmt.Fprintf(w, "DefaultColWidth\t%#v\t\n", shProps.DefaultColWidth)
+	} else {
+		fmt.Fprintf(w, "DefaultColWidth\t%#v\t\n", *shProps.DefaultColWidth)
+	}
+	if shProps.DefaultRowHeight == nil {
+		fmt.Fprintf(w, "DefaultRowHeight\t%#v\t\n", shProps.DefaultRowHeight)
+	} else {
+		fmt.Fprintf(w, "DefaultRowHeight\t%#v\t\n", *shProps.DefaultRowHeight)
+	}
 	fmt.Fprintf(w, "EnableFormatConditionsCalculation\t%#v\t\n",
 		*shProps.EnableFormatConditionsCalculation)
 	fmt.Fprintf(w, "FitToPage\t%#v\t\n", shProps.FitToPage)
@@ -116,16 +140,37 @@ func main() {
 	fmt.Fprintf(w, "TabColorRGB\t%#v\t\n", shProps.TabColorRGB)
 	fmt.Fprintf(w, "TabColorTheme\t%#v\t\n", shProps.TabColorTheme)
 	fmt.Fprintf(w, "TabColorTint\t%#v\t\n", shProps.TabColorTint)
-	fmt.Fprintf(w, "ThickBottom\t%#v\t\n", *shProps.ThickBottom)
-	fmt.Fprintf(w, "ThickTop\t%#v\t\n", *shProps.ThickTop)
-	fmt.Fprintf(w, "ZeroHeight\t%#v\t\n", *shProps.ZeroHeight)
+	if shProps.ThickBottom == nil {
+		fmt.Fprintf(w, "ThickBottom\t%#v\t\n", shProps.ThickBottom)
+	} else {
+		fmt.Fprintf(w, "ThickBottom\t%#v\t\n", *shProps.ThickBottom)
+	}
+	if shProps.ThickTop == nil {
+		fmt.Fprintf(w, "ThickTop\t%#v\t\n", shProps.ThickTop)
+	} else {
+		fmt.Fprintf(w, "ThickTop\t%#v\t\n", *shProps.ThickTop)
+	}
+	if shProps.ZeroHeight == nil {
+		fmt.Fprintf(w, "ZeroHeight\t%#v\t\n", shProps.ZeroHeight)
+	} else {
+		fmt.Fprintf(w, "ZeroHeight\t%#v\t\n", *shProps.ZeroHeight)
+	}
 	w.Flush()
 
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[PAGE LAYOUT:%s]\n", sheet)
-	pageLayout, _ := f.GetPageLayout(sheet)
+	pageLayout, err := f.GetPageLayout(sheet)
+	if err != nil {
+		slog.Error("page layout が取得できません", "error", err)
+		fmt.Printf("page layout が取得できません: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Fprintf(w, "AdjustTo\t%#v\t\n", *pageLayout.AdjustTo)
-	fmt.Fprintf(w, "BlackAndWhite\t%#v\t\n", *pageLayout.BlackAndWhite)
+	if pageLayout.BlackAndWhite == nil {
+		fmt.Fprintf(w, "BlackAndWhite\t%#v\t\n", pageLayout.BlackAndWhite)
+	} else {
+		fmt.Fprintf(w, "BlackAndWhite\t%#v\t\n", *pageLayout.BlackAndWhite)
+	}
 	fmt.Fprintf(w, "FirstPageNumber\t%#v\t\n", *pageLayout.FirstPageNumber)
 	fmt.Fprintf(w, "FitToHeight\t%#v\t\n", pageLayout.FitToHeight)
 	fmt.Fprintf(w, "FitToWidth\t%#v\t\n", pageLayout.FitToWidth)
@@ -135,7 +180,12 @@ func main() {
 
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[PAGE MARGINS:%s]\n", sheet)
-	pageMargins, _ := f.GetPageMargins(sheet)
+	pageMargins, err := f.GetPageMargins(sheet)
+	if err != nil {
+		slog.Error("page margins が取得できません", "error", err)
+		fmt.Printf("page margins が取得できません: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Fprintf(w, "Bottom\t%#v\t\n", *pageMargins.Bottom)
 	fmt.Fprintf(w, "Footer\t%#v\t\n", *pageMargins.Footer)
 	fmt.Fprintf(w, "Header\t%#v\t\n", *pageMargins.Header)
@@ -148,7 +198,17 @@ func main() {
 
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[HEADER FOOTER:%s]\n", sheet)
-	headerFooter, _ := f.GetHeaderFooter(sheet)
+	headerFooter, err := f.GetHeaderFooter(sheet)
+	if err != nil {
+		slog.Error("header footer が取得できません", "error", err)
+		fmt.Printf("header footer が取得できません: %v\n", err)
+		os.Exit(1)
+	}
+	if headerFooter == nil {
+		slog.Error("header footer is nil")
+		fmt.Println("header footer が nil")
+		os.Exit(1)
+	}
 	fmt.Fprintf(w, "AlignWithMargins\t%#v\t\n", headerFooter.AlignWithMargins)
 	fmt.Fprintf(w, "DifferentFirst\t%#v\t\n", headerFooter.DifferentFirst)
 	fmt.Fprintf(w, "DifferentOddEven\t%#v\t\n", headerFooter.DifferentOddEven)
@@ -199,7 +259,12 @@ func main() {
 	fmt.Printf("[COMMENTS:%s]\n", sheet)
 	fmt.Fprint(w,
 		"IDX\tAUTHOR\tAUTHOR ID\tCELL\tTEXT\tWIDTH\tHEIGHT\tPARAGRAPH FONT\tPARAGRAPH TEXT\t\n")
-	comments2, _ := f.GetComments(sheet)
+	comments2, err := f.GetComments(sheet)
+	if err != nil {
+		slog.Error("comments が取得できません", "error", err)
+		fmt.Printf("comments が取得できません: %v\n", err)
+		os.Exit(1)
+	}
 	for i, comment := range comments2 {
 		paragraph := comment.Paragraph[0]
 		fmt.Fprintf(w, "%d\t%#v\t%#v\t%#v\t%#v\t%#v\t%#v\t%#v\t%#v\t\n",
@@ -230,9 +295,16 @@ func main() {
 
 	fmt.Println(strings.Repeat("-", 72))
 	fmt.Printf("[CELL STYLE(%d):%s!R%dC%d]\n", styleIdx, sheet, cellRow, cellCol)
-	fmt.Fprint(w,
-		"STYLE\t\n")
 	style, _ := f.GetStyle(styleIdx)
-	fmt.Fprintf(w, "%#v\t\n", *style)
-	w.Flush()
+	border := style.Border
+	font := style.Font
+	alignment := style.Alignment
+	fmt.Println("STYLE")
+	fmt.Printf("%#v\n", style)
+	fmt.Println("BORDER")
+	fmt.Printf("%#v\n", border)
+	fmt.Println("FONT")
+	fmt.Printf("%#v\n", *font)
+	fmt.Println("ALIGNMENT")
+	fmt.Printf("%#v\n", *alignment)
 }

@@ -21,6 +21,7 @@ func TestExcel_NewExcel(t *testing.T) {
 		{"size=409", 409, true},
 		{"size=10.5", 10.5, true},
 		{"size=10.4", 10.4, false},
+		{"size=408.3", 408.3, false},
 		{"size=409.5", 409.5, false},
 		{"size=0", 0, false},
 		{"size=0", -1, false},
@@ -73,6 +74,11 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		}
 	}()
 
+	// シート「表紙」
+	if err := e.NewSheet("「表紙」の例", SheetTypeCover); err != nil {
+		t.Errorf("NewSheet: want no error, but: %v", err)
+	}
+
 	// シート「サンプル テスト」
 	if err := e.NewSheet("サンプル テスト"); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
@@ -81,8 +87,8 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		name string
 		x, y int
 	}{
-		{name: "(13, 3)", x: 13, y: 3},
-		{name: "(14, 4)", x: 14, y: 4},
+		{name: "(3, 3)", x: 3, y: 3},
+		{name: "(4, 6)", x: 4, y: 6},
 	}
 	for _, tt := range tests {
 		e.Col = tt.x
@@ -124,20 +130,20 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		t.Errorf("AddTable: want no error, but %v", err)
 	}
 
-	// シート「設定シート」
-	if err := e.NewSheet("設定シート", SheetTypeTOC); err != nil {
+	// シート「設定」
+	if err := e.NewSheet("「設定」の例", SheetTypeNormal); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
 	}
-	if err := e.SetVal("設定シート"); err != nil {
-		t.Errorf("SetVal: want no error, but: %v", err)
-	}
-	if err := e.MarkHeader(1); err != nil {
-		t.Errorf("MarkHeader: want no error, but: %v", err)
-	}
-	if err := e.SetVal("セル スタイル", 1, 5); err != nil {
+	if err := e.SetVal("設定"); err != nil {
 		t.Errorf("SetVal: want no error, but: %v", err)
 	}
 	if err := e.MarkHeader(2); err != nil {
+		t.Errorf("MarkHeader: want no error, but: %v", err)
+	}
+	if err := e.SetVal("セル スタイル", 1, 7); err != nil {
+		t.Errorf("SetVal: want no error, but: %v", err)
+	}
+	if err := e.MarkHeader(3); err != nil {
 		t.Errorf("MarkHeader: want no error, but: %v", err)
 	}
 	e.CR(2).LF(2)
@@ -151,16 +157,25 @@ func TestExcel_SaveAndClose(t *testing.T) {
 	}
 
 	// シート「標準」
-	if err := e.NewSheet("標準", SheetTypeNormal); err != nil {
+	if err := e.NewSheet("「標準」のシートの例", SheetTypeNormal); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
 	}
-	if err := e.SetVal("標準"); err != nil {
+	if err := e.LF().H1("これはレベル1のヘッダ"); err != nil {
+		t.Errorf("H1: want no error, but: %v", err)
+	}
+	if err := e.LF().H2("これはレベル2のヘッダ"); err != nil {
+		t.Errorf("H1: want no error, but: %v", err)
+	}
+	if err := e.LF().H3("これはレベル3のヘッダ"); err != nil {
+		t.Errorf("H1: want no error, but: %v", err)
+	}
+	if err := e.LF().SetVal("レベル1のヘッダ"); err != nil {
 		t.Errorf("SetVal: want no error, but: %v", err)
 	}
 	if err := e.MarkHeader(1); err != nil {
 		t.Errorf("MarkHeader: want no error, but: %v", err)
 	}
-	if err := e.SetVal("レベル2のヘッダ", 1, 5); err != nil {
+	if err := e.LF(2).SetVal("レベル2のヘッダ"); err != nil {
 		t.Errorf("SetVal: want no error, but: %v", err)
 	}
 	if err := e.MarkHeader(2); err != nil {
@@ -173,10 +188,10 @@ func TestExcel_SaveAndClose(t *testing.T) {
 	if err := e.LF().SetRow(&[]any{"このセルには文章を入力します。"}); err != nil {
 		t.Errorf("SetRow: want no error, but: %v", err)
 	}
-	if err := e.SetCellStyleForCurrentCell(
-		NewStyle().Bold().Add(bbT, bbL, bB),
+	if err := e.CR(5).LF().SetStyle(
+		NewStyle().Bold().add(b3T, b3L, b1B),
 	); err != nil {
-		t.Errorf("SetCellStyleForCurrentCell: want no error, but: %v", err)
+		t.Errorf("SetStyle: want no error, but: %v", err)
 	}
 	for y := 10; y < 20; y++ {
 		for x := 3; x < 16; x++ {
@@ -185,49 +200,41 @@ func TestExcel_SaveAndClose(t *testing.T) {
 				t.Errorf("want no error, but: %v", err)
 			}
 			if y == 10 {
-				if err = e.SetCellStyle(cell, NewStyle().Add(bbT)); err != nil {
+				if err = e.SetStyleForCell(cell, NewStyle(b3T)); err != nil {
 					t.Errorf("want no error, but: %v", err)
 				}
 			}
 			if y == 19 {
-				if err = e.SetCellStyle(cell, NewStyle().Add(bbB)); err != nil {
+				if err = e.SetStyleForCell(cell, NewStyle(b3B)); err != nil {
 					t.Errorf("want no error, but: %v", err)
 				}
 			}
 			if x == 3 {
-				if err = e.SetCellStyle(cell, NewStyle().Add(bbL)); err != nil {
+				if err = e.SetStyleForCell(cell, NewStyle(b3L)); err != nil {
 					t.Errorf("want no error, but: %v", err)
 				}
 			}
 			if x == 15 {
-				if err = e.SetCellStyle(cell, NewStyle().Add(bbR)); err != nil {
+				if err = e.SetStyleForCell(cell, NewStyle(b3R)); err != nil {
 					t.Errorf("want no error, but: %v", err)
 				}
 			}
 		}
 	}
-	if err := e.AddComment("コメントの例です"); err != nil {
+	if err := e.CR(2).LF().AddComment("コメントの例です"); err != nil {
 		t.Errorf("AddComment: want no error, but: %v", err)
 	}
-	if err := e.SetVal("レベル3のヘッダ", 1, 11); err != nil {
-		t.Errorf("SetVal: want no error, but: %v", err)
-	}
-	if err := e.MarkHeader(3); err != nil {
-		t.Errorf("MarkHeader: want no error, but: %v", err)
-	}
-	e.LF(2)
 	if err := e.SetVal("定数 CellStyle"); err != nil {
 		t.Errorf("SetVal: want no error, but: %v", err)
 	}
-	if err := e.MarkHeader(2); err != nil {
-		t.Errorf("MarkHeader: want no error, but: %v", err)
-	}
 	e.CR(2).LF()
 	for _, v := range []any{
-		cellStyleNormal,
-		cellStyleBold,
-		bT, bL, bR, bB,
-		bbT, bbL, bbR, bbB,
+		styleNormal,
+		fontBold,
+		b1T, b1L, b1R, b1B,
+		b2T, b2L, b2R, b2B,
+		b3T, b3L, b3R, b3B,
+		bdT, bdL, bdR, bdB,
 	} {
 		if err := e.LF().SetRow(&[]any{v}); err != nil {
 			t.Errorf("SetRow: want no error, but: %v", err)
@@ -261,20 +268,20 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		name  string
 		style cellStyle
 	}{
-		{"灰色1", fillGray1},
-		{"灰色2", fillGray2},
-		{"灰色3", fillGray3},
-		{"ピンク", fillPink},
-		{"黄色", fillYellow},
-		{"薄い青", fillLightBlue},
+		{"fg濃い青", fontHyperLink},
+		{"bg灰色1", fillGray1},
+		{"bg灰色2", fillGray2},
+		{"bg灰色3", fillGray3},
+		{"bg黄色", fillYellow},
+		{"bg薄い青", fillLightBlue},
 	} {
 		if err := e.LF().SetVal(bg.name); err != nil {
 			t.Errorf("SetVal: want no error, but: %v", err)
 		}
-		if err := e.SetCellStyleForCurrentCell(
-			NewStyle().Add(bg.style),
+		if err := e.SetStyle(
+			NewStyle(bg.style),
 		); err != nil {
-			t.Errorf("SetCellStyleForCurrentCell: want no error, but: %v", err)
+			t.Errorf("SetStyle: want no error, but: %v", err)
 		}
 	}
 	e.CR().LF(3)
@@ -297,19 +304,160 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		}
 	}
 
+	// シート「スタイル」
+	if err := e.NewSheet("スタイル", SheetTypeNormal); err != nil {
+		t.Errorf("NewSheet: want no error, but: %v", err)
+	}
+	if err := e.LF().H2("罫線の例"); err != nil {
+		t.Errorf("H2: want no error, but: %v", err)
+	}
+	borderTests := []struct {
+		name, cell1, cell2 string
+		typ                BorderType
+		isErr              bool
+		fill               cellStyle
+	}{
+		// error
+		{"X5:X5", "X5", "X5", BorderContinuousWeight1, true, fillGray3},
+		// boxes
+		{"C7:E9 weight=1", "C7", "E9", BorderContinuousWeight1, false, fillGray3},
+		{"G7:I9 weight=7", "G7", "I9", BorderContinuousWeight2, false, fillGray3},
+		{"K7:M9 weight=7", "K7", "M9", BorderContinuousWeight3, false, fillGray3},
+		{"O7:Q9 double", "O7", "Q9", BorderDoubleWeight3, false, fillGray3},
+		// horizontal
+		{"C11:E11 weight=1", "C11", "E11", BorderContinuousWeight1, false, fillGray3},
+		{"G11:I11 weight=11", "G11", "I11", BorderContinuousWeight2, false, fillGray3},
+		{"K11:M11 weight=11", "K11", "M11", BorderContinuousWeight3, false, fillGray3},
+		{"O11:Q11 double", "O11", "Q11", BorderDoubleWeight3, false, fillGray3},
+		// vertical
+		{"C13:C16 weight=1", "C13", "C16", BorderContinuousWeight1, false, fillGray3},
+		{"G13:G16 weight=13", "G13", "G16", BorderContinuousWeight2, false, fillGray3},
+		{"K13:K16 weight=13", "K13", "K16", BorderContinuousWeight3, false, fillGray3},
+		{"O13:O16 double", "O13", "O16", BorderDoubleWeight3, false, fillGray3},
+		// nested boxes
+		{"C20:Z30 weight=1", "C20", "Z30", BorderContinuousWeight1, false, fillGray1},
+		{"D21:Y29 weight=1", "D21", "Y29", BorderContinuousWeight2, false, fillGray2},
+		{"E22:X28 weight=13", "E22", "X28", BorderContinuousWeight3, false, fillGray3},
+		{"F23:W27 double", "F23", "W27", BorderDoubleWeight3, false, fillGray3},
+
+		{"G23:V27 weight=1", "G23", "V27", BorderContinuousWeight1, false, fillRed},
+		{"H22:U28 weight=1", "H22", "U28", BorderContinuousWeight2, false, fillYellow},
+		{"I21:T29 weight=13", "I21", "T29", BorderContinuousWeight3, false, fillLightBlue},
+		{"J20:S30 double", "J20", "S30", BorderDoubleWeight3, false, fillPurple},
+	}
+	for _, tt := range borderTests {
+		err := e.DrawBorders(tt.cell1, tt.cell2, tt.typ)
+		if err != nil && !tt.isErr {
+			t.Errorf("DrawBorders: want error, but: %v", err)
+		}
+		if err == nil && tt.isErr {
+			t.Errorf("DrawBorders: want no error, but: %v", err)
+		}
+	}
+	for _, tt := range borderTests {
+		if !tt.isErr {
+			if err := e.SetStyleForCellRange(
+				tt.cell1, tt.cell2, NewStyle().add(tt.fill)); err != nil {
+				t.Errorf("SetStyleForCellRange: want no error, but: %v", err)
+			}
+		}
+	}
+
+	e.Row = 32
+	if err := e.LF().H2("フォントサイズの例"); err != nil {
+		t.Errorf("H2: want no error, but: %v", err)
+	}
+	if err := e.CR(2).LF().SetVal("フォントサイズ20"); err != nil {
+		t.Errorf("SetVal: want no error, but: %v", err)
+	}
+	if err := e.SetStyle(NewStyle().add(fontSize20)); err != nil {
+		t.Errorf("SetStyle: want no error, but: %v", err)
+	}
+
+	if err := e.CR(2).LF().SetVal("フォントサイズ20"); err != nil {
+		t.Errorf("SetVal: want no error, but: %v", err)
+	}
+	if err := e.SetStyle(NewStyle().add(fontSize20)); err != nil {
+		t.Errorf("SetStyle: want no error, but: %v", err)
+	}
+	if err := e.SetVal("フォントサイズ12"); err != nil {
+		t.Errorf("SetVal: want no error, but: %v", err)
+	}
+	if err := e.SetStyle(NewStyle().add(fontSize12)); err != nil {
+		t.Errorf("SetStyle: want no error, but: %v", err)
+	}
+
+	if err := e.LF(3).H2("フォントの色"); err != nil {
+		t.Errorf("H2: want no error, but: %v", err)
+	}
+
+	fontColorTests := []struct {
+		name      string
+		fontColor cellStyle
+	}{
+		{"濃い赤", fontDeepRed},
+		{"赤", fontRed},
+		{"オレンジ", fontOrange},
+		{"黄", fontYellow},
+		{"薄い緑", fontLightGreen},
+		{"緑", fontGreen},
+		{"薄い青", fontLightBlue},
+		{"青", fontBlue},
+		{"濃い青", fontDarkBlue},
+		{"紫", fontPurple},
+		{"ハイパーリンク用", fontHyperLink},
+	}
+	for _, tt := range fontColorTests {
+		if err := e.CR(2).LF().SetVal(tt.name); err != nil {
+			t.Errorf("SetVal: want no error, but: %v", err)
+		}
+		if err := e.SetStyle(NewStyle().add(tt.fontColor)); err != nil {
+			t.Errorf("SetStyle: want no error, but: %v", err)
+		}
+	}
+
+	if err := e.LF(3).H2("背景色"); err != nil {
+		t.Errorf("H2: want no error, but: %v", err)
+	}
+
+	fillColorTests := []struct {
+		name      string
+		fontColor cellStyle
+	}{
+		{"濃い赤", fillDeepRed},
+		{"赤", fillRed},
+		{"オレンジ", fillOrange},
+		{"黄", fillYellow},
+		{"薄い緑", fillLightGreen},
+		{"緑", fillGreen},
+		{"薄い青", fillLightBlue},
+		{"青", fillBlue},
+		{"濃い青", fillDarkBlue},
+		{"紫", fillPurple},
+		{"グレー1", fillGray1},
+		{"グレー2", fillGray2},
+		{"グレー3", fillGray3},
+		{"グレー4", fillGray4},
+		{"グレー5", fillGray5},
+		{"<-- Excel Macro のヘッダ1", fillHeaderColor1},
+		{"<-- Excel Macro のヘッダ2", fillHeaderColor2},
+		{"<-- Excel Macro のヘッダ3", fillHeaderColor3},
+		{"ピンク <-- Excel Macro の CAUTION用", fillCaution},
+		{"黄色 <-- Excel Macro のNOTE用", fillNote},
+		{"薄い青 <-- Excel Macro のHINT用", fillHint},
+	}
+	for _, tt := range fillColorTests {
+		if err := e.CR(2).LF().SetVal(tt.name); err != nil {
+			t.Errorf("SetVal: want no error, but: %v", err)
+		}
+		if err := e.SetStyle(NewStyle().add(tt.fontColor)); err != nil {
+			t.Errorf("SetStyle: want no error, but: %v", err)
+		}
+	}
+
 	// シート「目次」
 	if err := e.NewSheet("目次", SheetTypeTOC); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
-	}
-	if err := e.SetVal("目次"); err != nil {
-		t.Errorf("SetVal: want no error, but: %v", err)
-	}
-	if err := e.MarkHeader(1); err != nil {
-		t.Errorf("MarkHeader: want no error, but: %v", err)
-	}
-	e.Col, e.Row = 10, 5
-	if err := e.MakeTOC(); err != nil {
-		t.Errorf("MarkTOC: want no error, but: %v", err)
 	}
 }
 

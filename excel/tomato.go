@@ -1,347 +1,569 @@
 package excel
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/xuri/excelize/v2"
 )
 
-/*
+// pageSetting configures page-specific properties.
+func (e *Excel) pageSetting(sheetType SheetType, title string) error {
+	if err := e.f.SetSheetProps(
+		e.sheet,
+		&excelize.SheetPropsOptions{
+			AutoPageBreaks:                    &boolTrue,
+			BaseColWidth:                      &uint80x0,
+			CodeName:                          (*string)(nil),
+			CustomHeight:                      &boolTrue,
+			DefaultColWidth:                   &defaultColWidth,
+			DefaultRowHeight:                  &defaultRowHeight,
+			EnableFormatConditionsCalculation: &boolTrue,
+			FitToPage:                         (*bool)(nil),
+			OutlineSummaryBelow:               &boolTrue,
+			OutlineSummaryRight:               (*bool)(nil),
+			Published:                         &boolTrue,
+			TabColorIndexed:                   (*int)(nil),
+			TabColorRGB:                       (*string)(nil),
+			TabColorTheme:                     (*int)(nil),
+			TabColorTint:                      (*float64)(nil),
+			ThickBottom:                       &boolFalse,
+			ThickTop:                          &boolFalse,
+			ZeroHeight:                        &boolFalse,
+		},
+	); err != nil {
+		return fmt.Errorf("cannot set sheet props: %s: %w", e.sheet, err)
+	}
 
-' ////////////////////////////////////////////////////////////////
-'  コメントにヘッダの印を付けるか目次を作成する。
-' ////////////////////////////////////////////////////////////////
-Public Sub markHeaderOrMakeTOC()
-    On Error GoTo ERR1
-    Application.ScreenUpdating = False
+	// タイトルの設定
+	switch sheetType {
+	case SheetTypeNormal:
+		e.Col, e.Row = 1, 1
+		if err := e.f.SetCellStr(e.sheet, "A1", title); err != nil {
+			return fmt.Errorf(
+				"failed to set value for cell 'A1' on sheet '%s': %s: %w",
+				e.sheet, title, err)
+		}
+		if err := e.MarkHeader(1); err != nil {
+			return err
+		}
+	case SheetTypeTOC:
+		e.Col, e.Row = 1, 1
+		title = "目次"
+		if err := e.f.SetCellStr(e.sheet, "A1", title); err != nil {
+			return fmt.Errorf(
+				"failed to set value for cell 'A1' on sheet '%s': %s: %w",
+				e.sheet, title, err)
+		}
+	case SheetTypeCover:
+		e.Col, e.Row = 1, 6
+		if err := e.f.SetCellStr(e.sheet, "A6", title); err != nil {
+			return fmt.Errorf(
+				"failed to set value for cell 'A6' on sheet '%s': %s: %w",
+				e.sheet, title, err)
+		}
+		if err := e.f.MergeCell(e.sheet, "A6", maxRightCell+"11"); err != nil {
+			return fmt.Errorf(
+				"failed to merge cells for 'A6:%s11' on sheet '%s': %w",
+				maxRightCell, e.sheet, err)
+		}
+		if err := e.SetStyle(NewStyle(fontSize20, fontBold,
+			// 配置
+			alignmentHorizontalCenter, // 横位置=中央揃え
+			alignmentVerticalCenterl,  // 縦位置=中央揃え
+			alignmentWrapText,         // 文字の制御: 折り返して全体を表示する
+		)); err != nil {
+			return err
+		}
+		for _, v := range []struct{ cell, value string }{
+			{"A20", "更新日付"},
+			{"E20", "内容"},
+			{"T20", "更新箇所"},
+			{"AD20", "更新者"},
+		} {
+			if err := e.f.SetCellStr(e.sheet, v.cell, v.value); err != nil {
+				return err
+			}
+		}
+		if err := e.DrawBorders2("A20", maxRightCell+"40",
+			TBorderHHeader); err != nil {
+			return err
+		}
+	}
 
-    ' 変数定義
-    Dim msgResult As String ' 質問の結果
-    Dim headerLevel As Integer ' ヘッダのレベル
+	switch sheetType {
+	case SheetTypeNormal, SheetTypeTOC:
+		e.Col, e.Row = 1, 1
+		if err := e.SetStyle(NewStyle(fontSize12, fontBold)); err != nil {
+			return err
+		}
+		for r, h := range map[int]float64{1: 15.75, 2: 3, 3: 15.75} {
+			if err := e.f.SetRowHeight(e.sheet, r, h); err != nil {
+				return err
+			}
+		}
 
-    ' レベルいくつのヘッダの印を付けますか？
-    msgResult = InputBox("レベルいくつのヘッダの印を付けますか？[1-" & MAX_HEADER_LEVEL & ", 0, T]" _
-        & vbCrLf & "1-" & MAX_HEADER_LEVEL & " ... ヘッダの印を付ける (レベル)" _
-        & vbCrLf & "0 ... コメントを削除する" _
-        & vbCrLf & "T ... 目次を作成する" _
-        , , 2)
-    If msgResult = "" Then Exit Sub
-    If InStr(1, "TtＴｔ", Left$(msgResult, 1), vbTextCompare) <> 0 Then
-        ' 目次を作成する
-        makeTOC
-        Exit Sub
-    ElseIf Not IsNumeric(msgResult) Then
-        Exit Sub
-    Else
-        headerLevel = CInt(msgResult)
-        If headerLevel >= 0 And headerLevel <= MAX_HEADER_LEVEL Then
-            markHeader (headerLevel)
-        End If
-    End If
-    Exit Sub
-ERR1: errorExit (Err.Description)
-End Sub
+		// 3行目の上にラインを引く
+		// TOMATO Macro: 2行目の上にラインを引く
+		e.DrawBorders("A3", maxRightCell+"3", BorderContinuousWeight3)
 
+		// 印刷タイトル - タイトル行: $1:$3
+		if err := e.f.SetDefinedName(&excelize.DefinedName{
+			Name:     "_xlnm.Print_Titles",
+			RefersTo: fmt.Sprintf("'%s'!$1:$3", e.sheet),
+			Scope:    e.sheet,
+		}); err != nil {
+			return fmt.Errorf("failed to set print titles on sheet '%s': %w",
+				e.sheet, err)
+		}
 
-'  コメントにヘッダの印を付ける
-Private Sub markHeader(ByVal headerLevel As Integer)
-    On Error GoTo ERR1
+	}
 
-    If headerLevel = 0 Then
-        ' コメントを削除する
-        Selection.ClearComments
-    Else
-        ' ヘッダの印を付ける
-        With Selection
-            .Font.Bold = True
-            .ClearComments
-            .AddComment
-            .comment.Visible = False
-            .comment.Text Text:=HEADER_MARK & headerLevel
-        End With
-    End If
-    Exit Sub
-ERR1: errorExit (Err.Description)
-End Sub
-*/
+	// ヘッダーとフッターの設定
+	if err := e.f.SetHeaderFooter(e.sheet, &excelize.HeaderFooterOptions{
+		AlignWithMargins: (*bool)(nil),
+		DifferentFirst:   false,
+		DifferentOddEven: false,
+		EvenFooter:       "",
+		EvenHeader:       "",
+		FirstFooter:      "",
+		FirstHeader:      "",
+		OddFooter:        "&C&P / &N",
+		OddHeader:        "",
+		ScaleWithDoc:     (*bool)(nil),
+	}); err != nil {
+		return fmt.Errorf("failed to set header and footer on sheet '%s': %w",
+			e.sheet, err)
+	}
 
-/*
-' 目次を作る
-Private Sub makeTOC(Optional isInteractive As Boolean = True)
-    On Error GoTo ERR1
+	switch sheetType {
+	case SheetTypeGridA3Landscape, SheetTypeGridA4Landscape:
+		// 印刷向きが横の場合
+		// TODO
+	default:
+		// 印刷向きが縦の場合
 
-    ' 変数定義
-    Dim Sh As Worksheet ' 処理中のシート
-    Dim number(3) As Integer ' 各レベルの番号
-    Dim i As Integer ' ループ変数
-    Dim cl As Range ' 列
-    Dim endY As Long ' 最終行
-    Dim y As Long ' ループ変数 (行)
-    Dim strTmp As String ' 一時変数
-    Dim headerLevel As Integer ' ヘッダのレベル
-    Dim msgResult As Variant ' MsgBox の結果
-    Dim isTOC As Boolean ' 目次を作成
-    Dim objComment As Object ' コメント
-    Dim TocCell As Range ' TOC を挿入する位置のセル
-    Dim headers(1000) As String ' ヘッダの配列
-    Dim headerLevels(1000) As Integer ' ヘッダのレベルの配列
-    Dim cellOfHeaders(1000) As String ' ヘッダが位置するセルを示す文字列
-    Dim NumOfHeaders As Integer ' ヘッダの数
-    Dim findBeginCell As Range ' 目次開始のコメントがあるセル
-    Dim findEndCell As Range ' 目次終了のコメントがあるセル
-    Dim insertCellRow As Long ' 挿入位置の行番号
-    Dim insertCellColumn As Long ' 挿入位置の列番号
-    Dim tmpName As name ' 名前
+		// ページレイアウトの設定
+		var (
+			adjustTo        uint = 100          // 拡大率=100%
+			blackAndWhite        = false        // 白黒印刷しない
+			firstPageNumber      = (*uint)(nil) // 先頭ページ番号=自動設定
+			fitToHeight          = (*int)(nil)
+			fitToWidth           = (*int)(nil)
+			orientation          = "portrait" // 印刷の向き=縦
+			size                 = 9          // 用紙サイズ=A4 (210 mm × 297 mm)
+		)
+		if err := e.f.SetPageLayout(e.sheet, &excelize.PageLayoutOptions{
+			AdjustTo:        &adjustTo,
+			BlackAndWhite:   &blackAndWhite,
+			FirstPageNumber: firstPageNumber,
+			FitToHeight:     fitToHeight,
+			FitToWidth:      fitToWidth,
+			Orientation:     &orientation,
+			Size:            &size,
+		}); err != nil {
+			return fmt.Errorf("failed to page layout on sheet '%s': %w",
+				e.sheet, err)
+		}
 
-    If isInteractive Then
-    msgResult = MsgBox("目次を作成します。" & vbCrLf _
-        & vbCrLf & "[はい] ... この位置または以前目次を作成した場所に目次を挿入" _
-        & vbCrLf & "[いいえ] ... 目次は作成せず、ヘッダのナンバリングの更新のみ" _
-        & vbCrLf & "[キャンセル] ... 処理の中止" _
-        , vbQuestion Or vbYesNoCancel)
-    Else
-        msgResult = vbYes
-    End If
-    If msgResult = vbYes Then
-        isTOC = True
-    ElseIf msgResult = vbNo Then
-        isTOC = False
-    Else
-        Exit Sub
-    End If
+		// 印刷マージンの設定
+		var (
+			bottom       = 0.629921269229078
+			footer       = 0.2362204818275031
+			header       = 0.2362204818275031
+			horizontally = (*bool)(nil)
+			left         = 0.629921269229078
+			right        = 0.2362204818275031
+			top          = 0.629921269229078
+			vertically   = (*bool)(nil)
+		)
+		if err := e.f.SetPageMargins(e.sheet,
+			&excelize.PageLayoutMarginsOptions{
+				Bottom:       &bottom,
+				Footer:       &footer,
+				Header:       &header,
+				Horizontally: horizontally,
+				Left:         &left,
+				Right:        &right,
+				Top:          &top,
+				Vertically:   vertically,
+			}); err != nil {
+			return fmt.Errorf("failed to page layout margins on sheet '%s': %w",
+				e.sheet, err)
+		}
+	}
 
-    Set TocCell = ActiveCell
-    For i = 0 To 3
-        number(i) = 0
-    Next i
-    NumOfHeaders = 0
+	switch sheetType {
+	case SheetTypeNormal:
+		e.Col, e.Row = 1, 4
+	case SheetTypeTOC:
+		e.Col, e.Row = 10, 5
+		if err := e.MakeTOC(); err != nil {
+			return err
+		}
+		e.Col, e.Row = 1, 1
+	default:
+		e.Col, e.Row = 1, 1
+	}
 
-    ' 名前の定義を削除
-    For Each tmpName In ActiveWorkbook.Names
-        If Right$(tmpName.name, Len(SUF_HEADER_NAME)) = SUF_HEADER_NAME Then tmpName.Delete
-    Next
+	return nil
+}
 
-    For Each Sh In Worksheets
-        endY = endRow(Sh)
-        For y = 1 To endY
-            Set cl = Sh.cells(y, 1)
-            While (cl.Column < MAX_EXCEL_COLUMN)
-                Set objComment = cl.comment
-                If Not objComment Is Nothing Then
-                    If Left$(objComment.Text, Len(HEADER_MARK)) = HEADER_MARK Then
-                        strTmp = Mid$(cl.comment.Text, Len(HEADER_MARK) + 1, 1)
-                        If IsNumeric(strTmp) Then
-                            headerLevel = CInt(strTmp)
-                            If headerLevel >= 1 And headerLevel <= MAX_HEADER_LEVEL Then
-                                ' セルがヘッダの場合
-                                number(headerLevel) = number(headerLevel) + 1
-                                strTmp = ""
-                                For i = 1 To headerLevel
-                                    strTmp = strTmp & number(i) & "."
-                                Next i
-                                For i = headerLevel + 1 To MAX_HEADER_LEVEL
-                                    number(i) = 0
-                                Next i
+type TomatoBorderType int
 
-                                For i = 1 To Len(cl.Value)
-                                    If InStr("0123456789.０１２３４５６７８９．", Mid$(cl.Value, i, 1)) = 0 Then
-                                        strTmp = strTmp & " " & Trim(Mid$(cl.Value, i))
-                                        i = Len(cl.Value) ' For i ループを抜ける
-                                    End If
-                                Next i
-                                cl.Value = strTmp
-                                headers(NumOfHeaders) = strTmp
+const (
+	TBorderUnknown TomatoBorderType = iota
 
-                                ' 名前を定義する。
-                                strTmp = StrConv(strTmp, vbNarrow)
+	TBorderNested    // "0-9" 入れ子構造の表
+	TBorderHHeader   // "H" 水平ヘッダのある表
+	TBorderHHeaderG  // "G" 水平ヘッダのある表 (グループ対応)
+	TBorderVHeader   // "V" 垂直ヘッダのある表
+	TBorderCaution   // "C" 警告用罫線
+	TBorderNote      // "N" 注意用罫線
+	TBorderInfo      // "I" ヒント用罫線
+	TBorderCode      // "T" TeleType文字 (コード部分に使用)
+	TBorderBullet    // "B" bullet 「■□●○」だけのセルに次のセルの内容を結合する
+	TBorderSchedule  // "s" 手順書用の枠 (項番の例: 1.1)
+	TBorderScheduleS // "S (Shift + S) ... 手順書用の枠 (項番の例: 1)
+)
 
-                                strTmp = Replace(strTmp, " ", "_")
-                                strTmp = Replace(strTmp, "　", "_")
-                                strTmp = Replace(strTmp, "!", "_")
-                                strTmp = Replace(strTmp, Chr$(34), "_") ' "
-                                strTmp = Replace(strTmp, "#", "_")
-                                strTmp = Replace(strTmp, "$", "_")
-                                strTmp = Replace(strTmp, "%", "_")
-                                strTmp = Replace(strTmp, "&", "_")
-                                strTmp = Replace(strTmp, "'", "_")
-                                strTmp = Replace(strTmp, "(", "_")
-                                strTmp = Replace(strTmp, ")", "_")
-                                strTmp = Replace(strTmp, "*", "_")
-                                strTmp = Replace(strTmp, "+", "_")
-                                strTmp = Replace(strTmp, ",", "_")
-                                strTmp = Replace(strTmp, "-", "_")
-                                strTmp = Replace(strTmp, "/", "_")
-                                strTmp = Replace(strTmp, ":", "_")
-                                strTmp = Replace(strTmp, ";", "_")
-                                strTmp = Replace(strTmp, "<", "_")
-                                strTmp = Replace(strTmp, "=", "_")
-                                strTmp = Replace(strTmp, ">", "_")
-                                strTmp = Replace(strTmp, "@", "_")
-                                strTmp = Replace(strTmp, "[", "_")
-                                strTmp = Replace(strTmp, "]", "_")
-                                strTmp = Replace(strTmp, "^", "_")
-                                strTmp = Replace(strTmp, "`", "_")
-                                strTmp = Replace(strTmp, "{", "_")
-                                strTmp = Replace(strTmp, "|", "_")
-                                strTmp = Replace(strTmp, "}", "_")
-                                strTmp = Replace(strTmp, "~", "_")
+// DrawBorders2 is a convenient method for easily creating tables.
+func (e *Excel) DrawBorders2(topLeftCell, bottomRightCell string,
+	borderType TomatoBorderType) error {
+	c1, r1, err := excelize.CellNameToCoordinates(topLeftCell)
+	if err != nil {
+		return err
+	}
+	c2, r2, err := excelize.CellNameToCoordinates(bottomRightCell)
+	if err != nil {
+		return err
+	}
+	if c1 > c2 || r1 > r2 {
+		return fmt.Errorf(
+			"invalid range: top-left (%s) must be less than or equal to bottom-right (%s)",
+			topLeftCell, bottomRightCell)
+	}
+	if (c2-c1+1)*(r2-r1+1) < 2 {
+		return errors.New(
+			"invalid range: the range must contain at least 2 cells")
+	}
 
-                                strTmp = PRE_HEADER_NAME & strTmp & SUF_HEADER_NAME
-                                ' ActiveWorkbook.Names.Add Name:=strTmp, RefersTo:=cl
+	switch borderType {
+	case TBorderNested:
+		// TODO:
+		// ' 入れ子構造の表
+		// If drawLevel < 0 Or drawLevel > 9 Then Exit Sub
+		// paramBorders (drawLevel)
+	case TBorderHHeader:
+		return e.headerBorders(borderType, c1, r1, c2, r2)
+	case TBorderHHeaderG:
+		return e.headerBorders(borderType, c1, r1, c2, r2)
+	case TBorderVHeader:
+		return e.headerBorders(borderType, c1, r1, c2, r2)
+	case TBorderCaution:
+		return e.admonitionBorders(borderType, c1, r1, c2, r2)
+	case TBorderNote:
+		return e.admonitionBorders(borderType, c1, r1, c2, r2)
+	case TBorderInfo:
+		return e.admonitionBorders(borderType, c1, r1, c2, r2)
+	case TBorderCode:
+		// TODO:
+		// ' TeleType文字(等幅フォント)にし、罫線で囲う
+		// If Range(cell1, cell2).Address <> originalSelection.Address Then
+		//     ' 予め選択範囲を決めていない場合は、上下1行を空行と想定し範囲を広げて加工
+		//     Set cell1 = cell1.Offset(-1, 0)
+		//     Set cell2 = cell2.Offset(1, 0)
+		//     Range(cell1, cell2).Select
+		// End If
+		// teleTypeBorders
+	case TBorderBullet:
+		// TODO:
+		// ElseIf InStr(1, "BbＢｂ", Left$(msgResult, 1), vbTextCompare) <> 0 Then
+		//     '「■□●○」だけのセルに次のセルの内容を結合する
+		//     mergeCheckBox
+	case TBorderSchedule:
+		// TODO:
+		// ElseIf InStr(1, "sｓ", Left$(msgResult, 1), vbBinaryCompare) <> 0 Then
+		//     drawTejunsyoBorder 2
+	case TBorderScheduleS:
+		// TODO:
+		// ElseIf InStr(1, "SＳ", Left$(msgResult, 1), vbBinaryCompare) <> 0 Then
+		//     drawTejunsyoBorder 1
+	default:
+		panic("invalid TomatoBorderType")
+	}
 
-                                headerLevels(NumOfHeaders) = headerLevel
-                                cellOfHeaders(NumOfHeaders) = "'" & Sh.name & "'!" & cl.Address(True, True, xlA1)
-                                NumOfHeaders = NumOfHeaders + 1
-                            End If
-                        End If
-                    End If
-                End If
-                Set cl = cl.End(xlToRight)
-            Wend
-        Next y
-    Next Sh
+	return nil
+}
 
-    ' 目次を作成する
-    Set findBeginCell = findComment(BEGIN_TABLE_OF_CONTENTS)
-    If isTOC Then
-        If Not findBeginCell Is Nothing Then
-            ' 目次開始のコメントが見つかった場合
-            Set findEndCell = findEndComment(findBeginCell, END_TABLE_OF_CONTENTS)
-            If Not findEndCell Is Nothing Then
-                ' コメントがある位置に挿入する。
-                findBeginCell.Worksheet.Activate
-                findBeginCell.Activate
-                insertCellRow = findBeginCell.Row
-                insertCellColumn = findBeginCell.Column
-                Range(findBeginCell, findEndCell).EntireRow.Select
-                Selection.Delete Shift:=xlUp
-                ActiveSheet.cells(insertCellRow, insertCellColumn).Activate
-            End If
-        Else
-            ' 目次開始のコメントが見つからなかった場合
-            ' カーソルのあったセルの位置に目次を挿入する｡
-            TocCell.Activate
-        End If
+func (e *Excel) headerBorders(borderType TomatoBorderType,
+	col1, row1, col2, row2 int) error {
+	isWrapText := 2
+	// 0: 変更しない
+	// 1: 折り返して全体を表示する
+	// 2: 縮小して全体を表示する
 
-        For i = 0 To NumOfHeaders - 1
-            If i <> 0 And headerLevels(i) = 1 Then
-                ' レベル1 のヘッダの前で空行を挿入
-                ActiveCell.EntireRow.Insert
-                ActiveCell.Offset(1, 0).Activate
-            End If
+	// 区切りとなるセル位置を記録する
+	separateCol := make(map[int]struct{})
+	separateRow := make(map[int]struct{})
+	// separateRw(UBound(separateRw)) = 1 // TODO
 
-            ' ヘッダをセルに入れる。
-            ActiveCell.EntireRow.Insert
-            ActiveSheet.Hyperlinks.Add _
-                Anchor:=ActiveCell.Offset(0, headerLevels(i) - 1), _
-                Address:="", SubAddress:=cellOfHeaders(i), _
-                TextToDisplay:=headers(i)
-            ActiveCell.Offset(0, headerLevels(i) - 1).Font.Size = 10
-            ActiveCell.Offset(0, headerLevels(i) - 1).Font.Bold = True
-            ActiveCell.Offset(0, headerLevels(i) - 1).Font.Underline = False
+	for r := row1; r <= row2; r++ {
+		nMergedColumns := 1
+		for c, prevC := col1, col1; c <= col2; c++ {
+			cell, err := excelize.CoordinatesToCellName(c, r)
+			if err != nil {
+				return err
+			}
+			if r == row1 {
+				// 1行目 かつ 何か値がある 場合
+				// 区切りとなるセルの位置を覚える
+				value, err := e.f.GetCellValue(e.sheet, cell)
+				if err != nil {
+					return err
+				}
+				if value != "" {
+					separateCol[c] = struct{}{}
+				}
+			} // if r == row1
+			if c == col1 {
+				// 1列目 かつ 何か値がある 場合
+				// 区切りとなるセルの位置を覚える
+				value, err := e.f.GetCellValue(e.sheet, cell)
+				if err != nil {
+					return err
+				}
+				if value != "" {
+					separateRow[r] = struct{}{}
+				}
+			} else { // nColumns != 1
+				if _, ok := separateCol[c]; ok {
+					// 1列目でなく かつ 区切りとなるセル の場合
+					// セルの結合
+					cell1, err := excelize.CoordinatesToCellName(prevC, r)
+					if err != nil {
+						return err
+					}
+					cell2, err := excelize.CoordinatesToCellName(c-1, r)
+					if err != nil {
+						return err
+					}
+					if err := e.headerBorders_mergeCells(cell1, cell2,
+						borderType, r-row1+1, nMergedColumns, isWrapText); err != nil {
+						return err
+					}
+					nMergedColumns++
+					prevC = c
+				} // if _, ok := separateCol[c]; ok
+				if c == col2 {
+					// 最終列だった場合
+					// セルの結合
+					cell1, err := excelize.CoordinatesToCellName(prevC, r)
+					if err != nil {
+						return err
+					}
+					cell2, err := excelize.CoordinatesToCellName(c, r)
+					if err != nil {
+						return err
+					}
+					if err := e.f.MergeCell(e.sheet, cell1, cell2); err != nil {
+						return err
+					}
+					if err := e.headerBorders_mergeCells(cell1, cell2,
+						borderType, r-row1+1, nMergedColumns, isWrapText); err != nil {
+						return err
+					}
+				} // if c = col2
+			} // if c == col1
+		} // for c
+	} // for r
+	/*
+				    If hOrV = "G" Then
+				        ' グループ対応だったら、複数の値が無いグループを結合
+				        Application.DisplayAlerts = False
 
-            If i = 0 Then
-                ' 最初のヘッダのみ､開始コメントを付ける｡
-                With ActiveCell
-                    .ClearComments
-                    .AddComment
-                    .comment.Visible = False
-                    .comment.Text Text:=BEGIN_TABLE_OF_CONTENTS
-                End With
-                ' 名前を定義する。
-                ' ActiveWorkbook.Names.Add Name:=TOC_NAME, RefersTo:=ActiveCell
-            End If
+				        nColumns = 0
 
-            ActiveCell.Offset(1, 0).Activate
+				        ' 各列でループする。
+				        For Each cl In Selection.Columns
+				            nColumns = nColumns + 1
+				            nRows = 0
 
-            If i = NumOfHeaders - 1 Then
-                ' 最終行の場合のみ、終了コメントを付ける。
-                ActiveCell.Offset(-1, 0).Activate
-                With ActiveCell
-                    .ClearComments
-                    .AddComment
-                    .comment.Visible = False
-                    .comment.Text Text:=END_TABLE_OF_CONTENTS
-                End With
-            End If
-        Next i
-    End If
-    Exit Sub
-ERR1: errorExit (Err.Description)
-End Sub
+				            If separateCl(nColumns) <> 0 Then
+				                ' 列の区切りの場合
 
+				                ' 各行でループする。
+				                For Each rw In cl.Rows
+				                    nRows = nRows + 1
 
-' あたえられた文字列で始まるコメントが最初に現れるセルを探す。
-' ただし、コメントが記入されたセルに値が入っている必要がある。
-Private Function findComment(ByVal comment As String) As Range
-    On Error GoTo ERR1
+				                    If nRows = 1 Then
+				                        Set prevSeparateCl = rw.Offset(1, 0)
+				                        numElements = 0
+				                    Else
+				                        If rw.Value <> "" Then
+				                            numElements = numElements + 1
+				                        End If
 
-    ' 変数定義
-    Dim Sh As Worksheet ' 処理中のシート
-    Dim endY As Long ' 最終行
-    Dim cl As Range ' 列
-    Dim y As Long ' ループ変数 (行)
-    Dim objComment As Object ' コメント
+				                        If separateRw(nRows + 1) <> 0 Then
+				                            ' 行区切りか最終行 (番兵) の場合
+				                            If numElements < 2 Then
+				                                ' セルの結合
+				                                mergeCells2 Range(prevSeparateCl, rw), isWrapText, False
+				                                numElements = 0
+				                            End If
 
-    For Each Sh In Worksheets
-        endY = endRow(Sh)
-        For y = 1 To endY
-            Set cl = Sh.cells(y, 1)
-            While (cl.Column < MAX_EXCEL_COLUMN)
-                Set objComment = cl.comment
-                If Not objComment Is Nothing Then
-                    If Left$(objComment.Text, Len(comment)) = comment Then
-                        ' コメントが見つかった場合
-                        Set findComment = cl
-                        Exit Function
-                    End If
-                End If
-                Set cl = cl.End(xlToRight)
-            Wend
-        Next y
-    Next Sh
+				                            Set prevSeparateCl = rw.Offset(1, 0)
+				                            numElements = 0
+				                        End If
+				                    End If
+				                Next rw
+				            End If
+				        Next cl
+				    End If
 
-    Set findComment = Nothing
-    Exit Function
-ERR1: errorExit (Err.Description)
-End Function
+				    ' 外枠を太線で引く
+				    outsideBorders (Selection.cells) // done
+		////////////////////////////
+		Dim rw As Range ' 行
+		Dim cl As Range ' 列
+		Dim separateCl() As Integer ' 区切りとなる列方向のセル
+		Dim separateRw() As Integer ' 区切りとなる行方向のセル
+		Dim prevSeparateCl As Range ' ひとつ前の区切りとなるセル
+		Dim nRows As Single ' 処理中の行目
+		Dim nColumns As Single ' 処理中の列目
+		Dim nMergedColumns As Single ' 処理中のマージ後の列目
+		Dim numElements ' 項目数を数える
+		Dim isWrapText As Single ' 1.折り返し, 2.縮小, -1.変更無し
+	*/
 
+	// 外枠を太線で引く
+	//outsideBorders(Selection.cells)
+	cell1, err := excelize.CoordinatesToCellName(col1, row1)
+	if err != nil {
+		return err
+	}
+	cell2, err := excelize.CoordinatesToCellName(col2, row2)
+	if err != nil {
+		return err
+	}
+	if err := e.DrawBorders(cell1, cell2,
+		BorderContinuousWeight2); err != nil {
+		return err
+	}
 
-' あたえられたセルと同じ列で、下方向に最初に現れるあたえられた文字列で始まるコメントが付いているセルを探す。
-' コメントが記入されたセルに値が入っている必要はない。
-' 但し、そのシートの一番下に値の入っている行 + 100行 以下は見ない。
-Private Function findEndComment(ByVal beginCell As Range, ByVal comment As String) As Range
-    On Error GoTo ERR1
+	return nil
+}
 
-    ' 変数定義
-    Dim Sh As Worksheet ' シート
-    Dim endY As Long ' 最終行
-    Dim cl As Range ' 列
-    Dim y As Long ' ループ変数 (行)
-    Dim objComment As Object ' コメント
+func (e *Excel) headerBorders_mergeCells(
+	topLeftCell, bottomRightCell string, // cells
+	borderType TomatoBorderType, nRows int, nMergedColumns int, isWrapText int,
+) error {
+	//// hOrV "H", "G", "V" -> borderType
 
-    Set Sh = beginCell.Worksheet
-    endY = endRow(Sh) + 100
-    If endY > MAX_EXCEL_ROW Then endY = MAX_EXCEL_ROW
-    For y = beginCell.Row + 1 To endY
-        Set cl = Sh.cells(y, beginCell.Column)
-        Set objComment = cl.comment
-        If Not objComment Is Nothing Then
-            If Left$(objComment.Text, Len(comment)) = comment Then
-                ' コメントが見つかった場合
-                Set findEndComment = cl
-                Exit Function
-            End If
-        End If
-    Next y
+	// セルの結合
+	//////////////// TODO -->
+	// mergeCells2 cells, isWrapText
+	if err := e.f.MergeCell(e.sheet,
+		topLeftCell, bottomRightCell); err != nil {
+		return err
+	}
 
-    Set findEndComment = Nothing
-    Exit Function
-ERR1: errorExit (Err.Description)
-End Function
-*/
+	switch borderType {
+	case TBorderHHeader, TBorderHHeaderG:
+		// 水平の場合
+	case TBorderVHeader:
+		// 垂直の場合
+	default:
+		panic("invalid TomatoBorderType")
+	}
+	//////////////// TODO <--
+	/*
+		    If hOrV = "H" Or hOrV = "G" Then
+		        ' 水平の場合
 
-// func endRow --> GetLastRowNumber()
+		        ' 右に縦線を実線で引く
+		        With cells.Borders(xlEdgeRight)
+		            .lineStyle = xlContinuous
+		            .weight = xlThin
+		        End With
+
+		        If nRows = 1 Then
+		            ' 1行目の場合
+		            ' 下に横線を2重線で引く
+		            With cells.Borders(xlEdgeBottom)
+		                .lineStyle = xlDouble
+		                .weight = xlThick
+		            End With
+
+		            ' ヘッダに色を塗る
+		            With cells.Interior
+		                .ColorIndex = HEADER_COLOR
+		                .Pattern = xlSolid
+		                .PatternColorIndex = xlAutomatic
+		            End With
+
+		            ' 横位置: 中央揃え
+		            cells.HorizontalAlignment = xlCenter
+		        Else
+		            ' 1行目以外の場合
+		            ' 下に横線を実線で引く
+		            With cells.Borders(xlEdgeBottom)
+		                .lineStyle = xlContinuous
+		                If hOrV = "G" And ActiveSheet.cells(cells.Row + 1, 2) = "" Then
+		                    ' 次の行の一列目が空欄なら、下に横線を破線を引く
+		                    .lineStyle = xlDash
+		                End If
+		                .weight = xlThin
+		            End With
+		        End If
+		    Else
+		        ' 垂直の場合
+
+		        ' 下に横線を実線で引く
+		        With cells.Borders(xlEdgeBottom)
+		            .lineStyle = xlContinuous
+		            .weight = xlThin
+		        End With
+
+		        If nMergedColumns = 1 Then
+		            ' マージ後の1列目の場合
+		            ' 右に縦線を2重線で引く
+		            With cells.Borders(xlEdgeRight)
+		                .lineStyle = xlDouble
+		                .weight = xlThick
+		            End With
+
+		            ' ヘッダに色を塗る
+		            With cells.Interior
+		                .ColorIndex = HEADER_COLOR
+		                .Pattern = xlSolid
+		                .PatternColorIndex = xlAutomatic
+		            End With
+
+		            ' 横位置: 中央揃え
+		            cells.HorizontalAlignment = xlCenter
+		        Else
+		            ' マージ後の1列目以外の場合
+		            ' 右に縦線を実線で引く
+		            With cells.Borders(xlEdgeRight)
+		                .lineStyle = xlContinuous
+		                .weight = xlThin
+		            End With
+		        End If
+		    End If
+		    Exit Sub
+		End Sub
+	*/
+	return nil
+}
+
+func (e *Excel) admonitionBorders(borderType TomatoBorderType,
+	col1, row1, col2, row2 int) error {
+	// TODO
+	return nil
+}
 
 // MakeTOC generates a table of contents for a document.
 func (e *Excel) MakeTOC() error {
@@ -453,6 +675,11 @@ func (e *Excel) MakeTOC() error {
 				"failed to set hyper link in cell '%s' to target '%s': %w",
 				cell, header.cellOfHeaders, err)
 		}
+		if err := e.SetStyle(
+			NewStyle(fontBold, fontHyperLink)); err != nil {
+			return fmt.Errorf("failed to set cell Style for cell '%s: %w",
+				cell, err)
+		}
 		if i == 0 {
 			// 最初のヘッダのみ､開始コメントを付ける｡
 			if err := e.AddComment(beginTableOfContents); err != nil {
@@ -462,9 +689,11 @@ func (e *Excel) MakeTOC() error {
 		}
 	}
 	// 最終行の場合のみ、終了コメントを付ける。
-	if err := e.AddComment(endTableOfContents); err != nil {
-		return fmt.Errorf("failed to add comment in cell '%s': %w",
-			cell, err)
+	if len(headers) > 1 {
+		if err := e.CR(2).AddComment(endTableOfContents); err != nil {
+			return fmt.Errorf("failed to add comment in cell '%s': %w",
+				cell, err)
+		}
 	}
 	return nil
 }
@@ -528,7 +757,7 @@ func (e *Excel) MarkHeader(headerLevel int) error {
 		}
 	} else {
 		// ヘッダの印を付ける
-		if err := e.SetCellStyleForCurrentCell(NewStyle().Bold()); err != nil {
+		if err := e.SetStyle(NewStyle(fontBold)); err != nil {
 			return fmt.Errorf("failed to set header mark: %w", err)
 		}
 		if err := e.AddComment(
@@ -537,4 +766,45 @@ func (e *Excel) MarkHeader(headerLevel int) error {
 		}
 	}
 	return nil
+}
+
+// h1H2H3 is a helper function used by the H1, H2, and H3 functions.
+func (e *Excel) h1H2H3(title string, level int) error {
+	e.Col = 1
+	cell, err := excelize.CoordinatesToCellName(e.Col, e.Row)
+	if err != nil {
+		return err
+	}
+	if err := e.f.SetCellStr(e.sheet, cell, title); err != nil {
+		return err
+	}
+	if err := e.MarkHeader(level); err != nil {
+		return err
+	}
+	e.Row++
+
+	return nil
+}
+
+// H1 creates a level 1 header and sets the specified title in the cell.
+// Before setting the header, CR() executes.
+// After setting the header, LF() executes.
+//
+// Example:
+//
+//	LF().H1("これはレベル1のヘッダ")
+//	LF().H2("これはレベル2のヘッダ")
+//	LF().H3("これはレベル3のヘッダ")
+func (e *Excel) H1(title string) error {
+	return e.h1H2H3(title, 1)
+}
+
+// H2 creates a level 2 header and sets the specified title in the cell.
+func (e *Excel) H2(title string) error {
+	return e.h1H2H3(title, 2)
+}
+
+// H3 creates a level 3 header and sets the specified title in the cell.
+func (e *Excel) H3(title string) error {
+	return e.h1H2H3(title, 3)
 }

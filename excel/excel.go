@@ -1,9 +1,10 @@
-//go:generate stringer -type SheetType -trimprefix SheetType
+// //go:generate stringer -type SheetType -trimprefix SheetType
 package excel
 
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 
@@ -15,10 +16,13 @@ import (
 type SheetType int
 
 const (
-	SheetTypeUnknown SheetType = iota
-	SheetTypeNormal
-	SheetTypeTOC
-	SheetTypeCover
+	SheetTypeUnknown         SheetType = iota
+	SheetTypeNormal                    // 1 … 標準 (A4縦)
+	SheetTypeCover                     // 2 … 表紙 (A4縦)
+	SheetTypeTOC                       // 3 … 目次 (A4縦)
+	SheetTypeGridA4Landscape           // 4 … 方眼紙 (A4横)
+	SheetTypeGridA3Landscape           // 5 … 方眼紙 (A3横)
+	SheetTypeSchedule                  // 6  … スケジュール
 )
 
 const (
@@ -53,7 +57,7 @@ type Excel struct {
 	// Cell Sytle
 	fontSize     float64
 	cellStyleIDs map[cellStyle]int
-	cellStyleMap map[string]cellStyle // cellStyleMap["A1"] = CellStyleBold
+	cellStyleMap map[string]cellStyle
 }
 
 // New creates an Excel instance with the given filename.
@@ -69,18 +73,17 @@ func New(book string, fontSize ...float64) (*Excel, error) {
 	}
 	if len(fontSize) > 0 {
 		size := fontSize[0]
-		if size < 1 || size > 409 || math.Mod(size*10, 5) != 0 {
+		if size < excelize.MinFontSize || size > excelize.MaxFontSize ||
+			math.Mod(size*10, 5) != 0 {
 			// 1 から 409、1 から 409 の間、.5 の倍数 (10.5 や 105.5 など)
 			_ = e.f.Close()
-			return nil, errors.New(
-				"font size must be between 1 and 409, and a multiple of 0.5.")
+			// "font size must be between %d and %d points", MinFontSize, MaxFontSizeize
+			return nil, errors.New(excelize.ErrFontSize.Error() +
+				", and a multiple of 0.5")
 		}
 		e.fontSize = size
 	}
-	// if err := e.f.SetDefaultFont(defaultFont); err != nil {
-	// return nil, fmt.Errorf("failed to set default font: %w", err)
-	// }
-	if err := e.f.SetDefaultFontAndSize(defaultFont, e.fontSize); err != nil {
+	if err := e.f.SetDefaultFont(defaultFont, e.fontSize); err != nil {
 		_ = e.f.Close()
 		return nil, fmt.Errorf("failed to set default font and size: %w", err)
 	}
@@ -159,6 +162,10 @@ func (e *Excel) NewSheet(sheet string, typ ...SheetType) error {
 				e.sheet, err)
 		}
 	}
+	title := sheet
+	if len(typ) > 0 && typ[0] == SheetTypeCover {
+		sheet = "表紙"
+	}
 	_, err := e.f.NewSheet(sheet)
 	if err != nil {
 		return fmt.Errorf("cannot add the sheet: %s: %w", sheet, err)
@@ -172,63 +179,28 @@ func (e *Excel) NewSheet(sheet string, typ ...SheetType) error {
 	}
 	e.sheetType = sheetType
 	switch sheetType {
-	case SheetTypeNormal:
-		fallthrough
-	case SheetTypeTOC:
-		fallthrough
-	case SheetTypeCover:
-		if err := e.f.SetSheetProps(
-			e.sheet,
-			&excelize.SheetPropsOptions{
-				AutoPageBreaks:                    &boolTrue,
-				BaseColWidth:                      &uint80x0,
-				CodeName:                          (*string)(nil),
-				CustomHeight:                      &boolTrue,
-				DefaultColWidth:                   &defaultColWidth,
-				DefaultRowHeight:                  &defaultRowHeight,
-				EnableFormatConditionsCalculation: &boolTrue,
-				FitToPage:                         (*bool)(nil),
-				OutlineSummaryBelow:               &boolTrue,
-				OutlineSummaryRight:               (*bool)(nil),
-				Published:                         &boolTrue,
-				TabColorIndexed:                   (*int)(nil),
-				TabColorRGB:                       (*string)(nil),
-				TabColorTheme:                     (*int)(nil),
-				TabColorTint:                      (*float64)(nil),
-				ThickBottom:                       &boolFalse,
-				ThickTop:                          &boolFalse,
-				ZeroHeight:                        &boolFalse,
-			},
-			/*
-				AutoPageBreak                      true
-				BaseColWidth                       0x0
-				CodeName                           (*string)(nil)
-				CustomHeight                       true
-				DefaultColWidth                    2.69921875
-				DefaultRowHeight                   13.5
-				EnableFormatConditionsCalculation  true
-				FitToPage                          (*bool)(nil)
-				OutlineSummaryBelow                true
-				OutlineSummaryRight                (*bool)(nil)
-				Published                          true
-				TabColorIndexed                    (*int)(nil)
-				TabColorRGB                        (*string)(nil)
-				TabColorTheme                      (*int)(nil)
-				TabColorTint                       (*float64)(nil)
-				ThickBottom                        false
-				ThickTop                           false
-				ZeroHeight                         false
-			*/
-		); err != nil {
-			return fmt.Errorf("cannot set sheet props: %s: %w",
-				sheet, err)
+	case SheetTypeUnknown:
+		// 何もしない
+	case SheetTypeNormal, SheetTypeCover, SheetTypeTOC:
+		if e.pageSetting(sheetType, title); err != nil {
+			if err2 := e.f.DeleteSheet(e.sheet); err2 != nil {
+				log.Printf("failed to delete sheet '%s': %v", e.sheet, err2)
+			}
+			return err
 		}
+	default:
+		if err := e.f.DeleteSheet(e.sheet); err != nil {
+			log.Printf("failed to delete sheet '%s': %v", e.sheet, err)
+		}
+		return fmt.Errorf("unsupported sheet type for sheet '%s': %v",
+			sheet, sheetType)
 	}
 	if isFoundDefaultSheet {
 		if err := e.f.DeleteSheet(defaultSheet); err != nil {
-			return fmt.Errorf(
-				"cannot delete the sheet: %s: %w",
-				sheet, err)
+			if err2 := e.f.DeleteSheet(e.sheet); err2 != nil {
+				log.Printf("failed to delete sheet '%s': %v", e.sheet, err2)
+			}
+			return fmt.Errorf("cannot delete the sheet: %s: %w", sheet, err)
 		}
 	}
 	return nil
