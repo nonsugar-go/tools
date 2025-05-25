@@ -6,8 +6,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nonsugar-go/tools/excel/dataframe"
 	"github.com/xuri/excelize/v2"
 )
+
+// TODO: HasVal, GetVal に置き換えらるところは、置き換える
 
 // pageSetting configures page-specific properties.
 func (e *Excel) pageSetting(sheetType SheetType, title string) error {
@@ -69,6 +72,7 @@ func (e *Excel) pageSetting(sheetType SheetType, title string) error {
 				"failed to merge cells for 'A6:%s11' on sheet '%s': %w",
 				maxRightCell, e.sheet, err)
 		}
+		// TODO:
 		if err := e.SetStyle(NewStyle(fontSize20, fontBold,
 			// 配置
 			alignmentHorizontalCenter, // 横位置=中央揃え
@@ -197,13 +201,7 @@ func (e *Excel) pageSetting(sheetType SheetType, title string) error {
 
 	switch sheetType {
 	case SheetTypeNormal:
-		e.Col, e.Row = 1, 4
-	case SheetTypeTOC:
-		e.Col, e.Row = 10, 5
-		if err := e.MakeTOC(); err != nil {
-			return err
-		}
-		e.Col, e.Row = 1, 1
+		e.Col, e.Row = 1, 3
 	default:
 		e.Col, e.Row = 1, 1
 	}
@@ -251,11 +249,8 @@ func (e *Excel) DrawBorders2(topLeftCell, bottomRightCell string,
 	}
 
 	switch borderType {
-	case TBorderNested:
-		// TODO:
-		// ' 入れ子構造の表
-		// If drawLevel < 0 Or drawLevel > 9 Then Exit Sub
-		// paramBorders (drawLevel)
+	case TBorderNested: // 入れ子構造の表
+		return e.paramBorders(c1, r1, c2, r2)
 	case TBorderHHeader:
 		return e.headerBorders(borderType, c1, r1, c2, r2)
 	case TBorderHHeaderG:
@@ -292,154 +287,16 @@ func (e *Excel) DrawBorders2(topLeftCell, bottomRightCell string,
 		// ElseIf InStr(1, "SＳ", Left$(msgResult, 1), vbBinaryCompare) <> 0 Then
 		//     drawTejunsyoBorder 1
 	default:
-		panic("invalid TomatoBorderType")
+		return fmt.Errorf("invalid border type: %v", borderType)
 	}
 
 	return nil
 }
 
-func (e *Excel) headerBorders(borderType TomatoBorderType,
-	col1, row1, col2, row2 int) error {
-	isWrapText := 2
-	// 0: 変更しない
-	// 1: 折り返して全体を表示する
-	// 2: 縮小して全体を表示する
-
-	// 区切りとなるセル位置を記録する
-	separateCol := make(map[int]struct{})
-	separateRow := make(map[int]struct{})
-	// separateRw(UBound(separateRw)) = 1 // TODO
-
-	for r := row1; r <= row2; r++ {
-		nMergedColumns := 1
-		for c, prevC := col1, col1; c <= col2; c++ {
-			cell, err := excelize.CoordinatesToCellName(c, r)
-			if err != nil {
-				return err
-			}
-			if r == row1 {
-				// 1行目 かつ 何か値がある 場合
-				// 区切りとなるセルの位置を覚える
-				value, err := e.f.GetCellValue(e.sheet, cell)
-				if err != nil {
-					return err
-				}
-				if value != "" {
-					separateCol[c] = struct{}{}
-				}
-			} // if r == row1
-			if c == col1 {
-				// 1列目 かつ 何か値がある 場合
-				// 区切りとなるセルの位置を覚える
-				value, err := e.f.GetCellValue(e.sheet, cell)
-				if err != nil {
-					return err
-				}
-				if value != "" {
-					separateRow[r] = struct{}{}
-				}
-			} else { // nColumns != 1
-				if _, ok := separateCol[c]; ok {
-					// 1列目でなく かつ 区切りとなるセル の場合
-					// セルの結合
-					cell1, err := excelize.CoordinatesToCellName(prevC, r)
-					if err != nil {
-						return err
-					}
-					cell2, err := excelize.CoordinatesToCellName(c-1, r)
-					if err != nil {
-						return err
-					}
-					if err := e.headerBorders_mergeCells(cell1, cell2,
-						borderType, r-row1+1, nMergedColumns, isWrapText); err != nil {
-						return err
-					}
-					nMergedColumns++
-					prevC = c
-				} // if _, ok := separateCol[c]; ok
-				if c == col2 {
-					// 最終列だった場合
-					// セルの結合
-					cell1, err := excelize.CoordinatesToCellName(prevC, r)
-					if err != nil {
-						return err
-					}
-					cell2, err := excelize.CoordinatesToCellName(c, r)
-					if err != nil {
-						return err
-					}
-					if err := e.f.MergeCell(e.sheet, cell1, cell2); err != nil {
-						return err
-					}
-					if err := e.headerBorders_mergeCells(cell1, cell2,
-						borderType, r-row1+1, nMergedColumns, isWrapText); err != nil {
-						return err
-					}
-				} // if c = col2
-			} // if c == col1
-		} // for c
-	} // for r
-	/*
-				    If hOrV = "G" Then
-				        ' グループ対応だったら、複数の値が無いグループを結合
-				        Application.DisplayAlerts = False
-
-				        nColumns = 0
-
-				        ' 各列でループする。
-				        For Each cl In Selection.Columns
-				            nColumns = nColumns + 1
-				            nRows = 0
-
-				            If separateCl(nColumns) <> 0 Then
-				                ' 列の区切りの場合
-
-				                ' 各行でループする。
-				                For Each rw In cl.Rows
-				                    nRows = nRows + 1
-
-				                    If nRows = 1 Then
-				                        Set prevSeparateCl = rw.Offset(1, 0)
-				                        numElements = 0
-				                    Else
-				                        If rw.Value <> "" Then
-				                            numElements = numElements + 1
-				                        End If
-
-				                        If separateRw(nRows + 1) <> 0 Then
-				                            ' 行区切りか最終行 (番兵) の場合
-				                            If numElements < 2 Then
-				                                ' セルの結合
-				                                mergeCells2 Range(prevSeparateCl, rw), isWrapText, False
-				                                numElements = 0
-				                            End If
-
-				                            Set prevSeparateCl = rw.Offset(1, 0)
-				                            numElements = 0
-				                        End If
-				                    End If
-				                Next rw
-				            End If
-				        Next cl
-				    End If
-
-				    ' 外枠を太線で引く
-				    outsideBorders (Selection.cells) // done
-		////////////////////////////
-		Dim rw As Range ' 行
-		Dim cl As Range ' 列
-		Dim separateCl() As Integer ' 区切りとなる列方向のセル
-		Dim separateRw() As Integer ' 区切りとなる行方向のセル
-		Dim prevSeparateCl As Range ' ひとつ前の区切りとなるセル
-		Dim nRows As Single ' 処理中の行目
-		Dim nColumns As Single ' 処理中の列目
-		Dim nMergedColumns As Single ' 処理中のマージ後の列目
-		Dim numElements ' 項目数を数える
-		Dim isWrapText As Single ' 1.折り返し, 2.縮小, -1.変更無し
-	*/
-
-	// 外枠を太線で引く
-	//outsideBorders(Selection.cells)
+// setStyleBorders applies a common style to all cells
+// within the specified range.
+func (e *Excel) setStyleBorders(col1, row1, col2, row2 int) error {
+	// 全てのセルに適用するスタイルを設定する
 	cell1, err := excelize.CoordinatesToCellName(col1, row1)
 	if err != nil {
 		return err
@@ -448,120 +305,622 @@ func (e *Excel) headerBorders(borderType TomatoBorderType,
 	if err != nil {
 		return err
 	}
-	if err := e.DrawBorders(cell1, cell2,
-		BorderContinuousWeight2); err != nil {
+	if err := e.SetStyleForCellRange(cell1, cell2, NewStyle(
+		// 文字の配置 > 縦位置: 中央揃え
+		alignmentVerticalCenterl,
+		// 文字の制御 > 縮小して全体を表示する: true
+		alignmentShrinkToFit,
+	)); err != nil {
 		return err
 	}
-
 	return nil
 }
 
-func (e *Excel) headerBorders_mergeCells(
-	topLeftCell, bottomRightCell string, // cells
-	borderType TomatoBorderType, nRows int, nMergedColumns int, isWrapText int,
-) error {
-	//// hOrV "H", "G", "V" -> borderType
-
-	// セルの結合
-	//////////////// TODO -->
-	// mergeCells2 cells, isWrapText
-	if err := e.f.MergeCell(e.sheet,
-		topLeftCell, bottomRightCell); err != nil {
+func (e *Excel) drawOuterBorders(col1, row1, col2, row2 int) error {
+	// 外枠を太線で引く
+	cell1, err := excelize.CoordinatesToCellName(col1, row1)
+	if err != nil {
 		return err
 	}
+	cell2, err := excelize.CoordinatesToCellName(col2, row2)
+	if err != nil {
+		return err
+	}
+	if err := e.DrawBorders(
+		cell1, cell2, BorderContinuousWeight2); err != nil {
+		return err
+	}
+	return nil
+}
 
+// headerBorders applies borders around the specified area.
+// The border style is determined by the given border type.
+//
+// Parameters:
+//
+//	borderType: Specifies the style of the border.
+//	col1, row1: Coordinates of the top-left corner.
+//	col2, row2: Coordinates of the bottom-right corner.
+func (e *Excel) headerBorders(borderType TomatoBorderType,
+	col1, row1, col2, row2 int) error {
+	//     0        1           2
+	//     23456 78901 23456 789012 3
+	//     *     *     *     *      *<-- sepCol = []int{2, 7, 12, 17, 23}
+	//    ##########################
+	// 07*#ID   |SRC  |DST  |ACT   #
+	//    #========================#
+	// 08*#A0001|host1|ALL  |PERMIT#
+	//    #-----+-----+-----+------#
+	// 09 #     |host2|     |      #
+	//    #-----+-----+-----+------#
+	// 10*#A0002|     |web1 |DENY  #
+	//    #-----+-----+-----+------#
+	// 11 #     |     |web2 |      #
+	//    ##########################
+	// 12*
+	//   ^
+	//   |
+	//   +-- sepRow = []int{07, 08, 10, 12}
+	sepCol := make([]int, 0, 2) // 列区切りとなるセルの位置
+	sepRow := make([]int, 0, 2) // 行区切りとなるセルの位置
+
+	sepCol = append(sepCol, col1)
+	for c := col1 + 1; c <= col2; c++ {
+		cell, err := excelize.CoordinatesToCellName(c, row1)
+		if err != nil {
+			return err
+		}
+		// 1行目かつ何か値がある場合
+		// 列区切りとなるセルの位置を覚える
+		value, err := e.f.GetCellValue(e.sheet, cell)
+		if err != nil {
+			return err
+		}
+		if value != "" {
+			sepCol = append(sepCol, c)
+		}
+	} // for c
+	sepCol = append(sepCol, col2+1)
+
+	sepRow = append(sepRow, row1)
+	for r := row1 + 1; r <= row2; r++ {
+		if borderType == TBorderHHeaderG {
+			cell, err := excelize.CoordinatesToCellName(col1, r)
+			if err != nil {
+				return err
+			}
+			// 1列目かつ何か値がある場合
+			// 行区切りとなるセルの位置を覚える
+			value, err := e.f.GetCellValue(e.sheet, cell)
+			if err != nil {
+				return err
+			}
+			if value != "" {
+				sepRow = append(sepRow, r)
+			}
+		} else { // if borderType == TBorderHHeaderG
+			sepRow = append(sepRow, r)
+		} // if borderType == TBorderHHeaderG
+	} // for r
+	sepRow = append(sepRow, row2+1)
+
+	// 全てのセルに適用するスタイルを設定する
+	if err := e.setStyleBorders(col1, row1, col2, row2); err != nil {
+		return err
+	}
+	/*
+		cell1, err := excelize.CoordinatesToCellName(col1, row1)
+		if err != nil {
+			return err
+		}
+		cell2, err := excelize.CoordinatesToCellName(col2, row2)
+		if err != nil {
+			return err
+		}
+		if err := e.SetStyleForCellRange(cell1, cell2, NewStyle(
+			// 文字の配置 > 縦位置: 中央揃え
+			alignmentVerticalCenterl,
+			// 文字の制御 > 縮小して全体を表示する: true
+			alignmentShrinkToFit,
+		)); err != nil {
+			return err
+		}
+	*/
+
+	// 列区切りとなるセルの位置でマージする
+	for r := row1; r <= row2; r++ {
+		prevC := sepCol[0]
+		for _, c := range sepCol[1:] {
+			// セルの結合
+			cell1, err := excelize.CoordinatesToCellName(prevC, r)
+			if err != nil {
+				return err
+			}
+			cell2, err := excelize.CoordinatesToCellName(c-1, r)
+			if err != nil {
+				return err
+			}
+			if err := e.f.MergeCell(
+				e.sheet, cell1, cell2); err != nil {
+				return err
+			}
+			prevC = c
+		} // for _, c := range sepCol
+	} // for r
+
+	// 列区切りとなるセルの位置で内側 (左) の線を引く
+	for _, c := range sepCol[1 : len(sepCol)-1] {
+		// 内側 (左) の線を引く
+		cell1, err := excelize.CoordinatesToCellName(c, row1)
+		if err != nil {
+			return err
+		}
+		cell2, err := excelize.CoordinatesToCellName(c, row2)
+		if err != nil {
+			return err
+		}
+		if err := e.DrawBorders(
+			cell1, cell2, BorderContinuousWeight1); err != nil {
+			return err
+		}
+	} // for _, c := range sepCol[1:]
+
+	// 内側 (上) の線を引く
+	skipRows := 2
+	if borderType == TBorderVHeader { // 垂直の場合
+		skipRows = 1
+	}
+	for _, r := range sepRow[skipRows:] {
+		cell1, err := excelize.CoordinatesToCellName(col1, r)
+		if err != nil {
+			return err
+		}
+		cell2, err := excelize.CoordinatesToCellName(col2, r)
+		if err != nil {
+			return err
+		}
+		if err := e.DrawBorders(
+			cell1, cell2, BorderContinuousWeight1); err != nil {
+			return err
+		}
+	} // for _, r := range sepRow[skipRows:]
+
+	// 「水平ヘッダのある表 (グループ対応)」 の場合
+	// 複数行のマージと区切りの点線を引く
+	//
+	//     0        1           2
+	//     23456 78901 23456 789012 3
+	//     *     *     *     *      *
+	//    ##########################
+	// 07*# ID  | SRC | DST | ACT  #
+	//    #========================#
+	// 08*#     |host1|     |      #
+	//    #A0001+.....+ALL  +PERMIT#
+	// 09 #     |host2|     |      #
+	//    #-----+-----+-----+------#
+	// 10*#     |     |web1 |      #
+	//    #A0002+ALL  +.....+DENY  #
+	// 11 #     |     |web2 |      #
+	//    ##########################
+	// 12*
+	if borderType == TBorderHHeaderG {
+		for i := 1; i < len(sepRow)-1; i++ { // ヘッダと表の次の行を除く
+			// グループごとに処理 (e.g., ID=A0001, ID=A0002)
+			if sepRow[i+1]-sepRow[i] < 2 { // 2行以上なければスキップ
+				continue
+			}
+			for j := range len(sepCol) - 1 { // 表の次の列を除く
+				// グループごと、列ごとに処理
+				c := sepCol[j]
+
+				// 対象の列が配列形式か？
+				isArray := false
+				for r := sepRow[i] + 1; r < sepRow[i+1]; r++ {
+					cell, err := excelize.CoordinatesToCellName(c, r)
+					if err != nil {
+						return err
+					}
+					value, err := e.f.GetCellValue(e.sheet, cell)
+					if err != nil {
+						return err
+					}
+					if value != "" {
+						isArray = true
+						break
+					}
+				} // for r
+				if !isArray {
+					// 配列形式でなければ、その列をマージ
+					cell1, err := excelize.CoordinatesToCellName(c, sepRow[i])
+					if err != nil {
+						return err
+					}
+					cell2, err := excelize.CoordinatesToCellName(
+						sepCol[j+1]-1, sepRow[i+1]-1)
+					if err != nil {
+						return err
+					}
+					if err := e.f.MergeCell(
+						e.sheet, cell1, cell2); err != nil {
+						return err
+					}
+				} else { // if !isArray
+					// 配列形式なら、内側 (上) の破線を引く
+					for r := sepRow[i] + 1; r < sepRow[i+1]; r++ {
+						cell1, err := excelize.CoordinatesToCellName(
+							c, r)
+						if err != nil {
+							return err
+						}
+						cell2, err := excelize.CoordinatesToCellName(
+							sepCol[j+1]-1, r)
+						if err != nil {
+							return err
+						}
+						if err := e.DrawBorders(
+							cell1, cell2, BorderDashWeight1); err != nil {
+							return err
+						}
+					} // for r
+				} // if !isArray
+			} // for j
+		} // for i
+	} // if borderType == TBorderHHeaderG
+
+	// ヘッダのスタイル
 	switch borderType {
-	case TBorderHHeader, TBorderHHeaderG:
-		// 水平の場合
-	case TBorderVHeader:
-		// 垂直の場合
+	case TBorderHHeader, TBorderHHeaderG: // 水平の場合
+		cell1, err := excelize.CoordinatesToCellName(col1, row1)
+		if err != nil {
+			return err
+		}
+		cell2, err := excelize.CoordinatesToCellName(col2, row1)
+		if err != nil {
+			return err
+		}
+
+		if err := e.SetStyleForCellRange(cell1, cell2, NewStyle(
+			fillHeaderColor3,          // ヘッダに色を塗る
+			alignmentHorizontalCenter, // 文字の配置 > 横位置: 中央揃え
+		)); err != nil {
+			return err
+		}
+
+		cell1, err = excelize.CoordinatesToCellName(col1, row1+1)
+		if err != nil {
+			return err
+		}
+		cell2, err = excelize.CoordinatesToCellName(col2, row1+1)
+		if err != nil {
+			return err
+		}
+
+		// ヘッダの行の上に二重線を引く
+		if err := e.DrawBorders(
+			cell1, cell2, BorderDoubleWeight3); err != nil {
+			return err
+		}
+	case TBorderVHeader: // 垂直の場合
+		col3 := sepCol[1]
+		cell1, err := excelize.CoordinatesToCellName(col1, row1)
+		if err != nil {
+			return err
+		}
+		cell2, err := excelize.CoordinatesToCellName(col3-1, row2)
+		if err != nil {
+			return err
+		}
+
+		if err := e.SetStyleForCellRange(cell1, cell2, NewStyle(
+			fillHeaderColor3,          // ヘッダに色を塗る
+			alignmentHorizontalCenter, // 文字の配置 > 横位置: 中央揃え
+		)); err != nil {
+			return err
+		}
+
+		cell1, err = excelize.CoordinatesToCellName(col3, row1)
+		if err != nil {
+			return err
+		}
+		cell2, err = excelize.CoordinatesToCellName(col3, row2)
+		if err != nil {
+			return err
+		}
+
+		// ヘッダの行の右に二重線を引く
+		if err := e.DrawBorders(
+			cell1, cell2, BorderDoubleWeight3); err != nil {
+			return err
+		}
 	default:
 		panic("invalid TomatoBorderType")
 	}
-	//////////////// TODO <--
+
+	// 外枠を太線で引く
+	if err := e.drawOuterBorders(col1, row1, col2, row2); err != nil {
+		return nil
+	}
 	/*
-		    If hOrV = "H" Or hOrV = "G" Then
-		        ' 水平の場合
-
-		        ' 右に縦線を実線で引く
-		        With cells.Borders(xlEdgeRight)
-		            .lineStyle = xlContinuous
-		            .weight = xlThin
-		        End With
-
-		        If nRows = 1 Then
-		            ' 1行目の場合
-		            ' 下に横線を2重線で引く
-		            With cells.Borders(xlEdgeBottom)
-		                .lineStyle = xlDouble
-		                .weight = xlThick
-		            End With
-
-		            ' ヘッダに色を塗る
-		            With cells.Interior
-		                .ColorIndex = HEADER_COLOR
-		                .Pattern = xlSolid
-		                .PatternColorIndex = xlAutomatic
-		            End With
-
-		            ' 横位置: 中央揃え
-		            cells.HorizontalAlignment = xlCenter
-		        Else
-		            ' 1行目以外の場合
-		            ' 下に横線を実線で引く
-		            With cells.Borders(xlEdgeBottom)
-		                .lineStyle = xlContinuous
-		                If hOrV = "G" And ActiveSheet.cells(cells.Row + 1, 2) = "" Then
-		                    ' 次の行の一列目が空欄なら、下に横線を破線を引く
-		                    .lineStyle = xlDash
-		                End If
-		                .weight = xlThin
-		            End With
-		        End If
-		    Else
-		        ' 垂直の場合
-
-		        ' 下に横線を実線で引く
-		        With cells.Borders(xlEdgeBottom)
-		            .lineStyle = xlContinuous
-		            .weight = xlThin
-		        End With
-
-		        If nMergedColumns = 1 Then
-		            ' マージ後の1列目の場合
-		            ' 右に縦線を2重線で引く
-		            With cells.Borders(xlEdgeRight)
-		                .lineStyle = xlDouble
-		                .weight = xlThick
-		            End With
-
-		            ' ヘッダに色を塗る
-		            With cells.Interior
-		                .ColorIndex = HEADER_COLOR
-		                .Pattern = xlSolid
-		                .PatternColorIndex = xlAutomatic
-		            End With
-
-		            ' 横位置: 中央揃え
-		            cells.HorizontalAlignment = xlCenter
-		        Else
-		            ' マージ後の1列目以外の場合
-		            ' 右に縦線を実線で引く
-		            With cells.Borders(xlEdgeRight)
-		                .lineStyle = xlContinuous
-		                .weight = xlThin
-		            End With
-		        End If
-		    End If
-		    Exit Sub
-		End Sub
+		cell1, err := excelize.CoordinatesToCellName(col1, row1)
+		if err != nil {
+			return err
+		}
+		cell2, err := excelize.CoordinatesToCellName(col2, row2)
+		if err != nil {
+			return err
+		}
+		if err := e.DrawBorders(
+			cell1, cell2, BorderContinuousWeight2); err != nil {
+			return err
+		}
 	*/
+
 	return nil
 }
 
+// paramBorders draws nested borders for a specified cell range.
+func (e *Excel) paramBorders(col1, row1, col2, row2 int) error {
+	// TODO: 見直しが必要
+
+	// 全てのセルに適用するスタイルを設定する
+	if err := e.setStyleBorders(col1, row1, col2, row2); err != nil {
+		return err
+	}
+
+	// 各レベルの塗りつぶしの色
+	levelColor := [...]cellStyle{styleNormal,
+		fillGray1, fillGray2, fillGray3, // level=1-3
+		fillGray1, fillGray2, fillGray3, // level=4-6
+		fillGray1, fillGray2, fillGray3} // level=7-9
+
+	// Excel Macro: calcLevels Selection, levels
+	// レベルを計算する
+	// レベルとは、各行の最初に値が存在する列の位置
+	// ただし、直前のレベルからひとつずつしか増えない
+	// level=1 かつ 下の行が level=1 の場合は、level=0 と定義する
+	// level=1 かつ 最終行の場合は、level=0 と定義
+	//
+	// 1-2-3-4-5
+	// A         level=0 下の行が level=1 なので、level=0 と定義
+	// B     b b level=1 ヘッダ行
+	//   C   c c level=2
+	//   D     d level=2
+	//     E e   level=3
+	//   F     f level=2
+	// G     g   level=0 最終行なので、level=0 と定義
+	levels := make(map[int]int, row2-row1+1) // 各行のレベル
+	prevLevel := 1
+	for r := row1; r <= row2; r++ {
+		level := 0
+		levels[r] = prevLevel
+		for c := col1; c <= col2; c++ {
+			level++
+			// 何か書き込んであるセルを見つけたら
+			hasVal, err := e.HasVal(c, r)
+			if err != nil {
+				return err
+			}
+			if hasVal {
+				if level <= prevLevel+1 {
+					// レベルはひとつずつしか上がらない
+					levels[r] = level
+					prevLevel = level
+					break // for c
+				}
+			}
+		} // for c
+	} // for r
+
+	// level=1 かつ 下の行が level=1 の場合は、level=0 と定義する
+	// level=1 かつ 最終行の場合は、level=0 と定義
+	for r := row1; r <= row2; r++ {
+		if levels[r] == 1 {
+			if r == row2 {
+				levels[r] = 0
+			} else if levels[r+1] == 1 {
+				levels[r] = 0
+			}
+		}
+	} // for r
+
+	// ヘッダ行かどうかを返す
+	isHeaderRow := func(row int, levels map[int]int) bool {
+		if row >= row2 {
+			// 最終行はヘッダ行でない
+			return false
+		}
+		if levels[row] == 0 {
+			// レベル0はヘッダではない
+			return false
+		}
+		if levels[row] < levels[row+1] {
+			// レベルが、次の行のレベルより小さければヘッダ行
+			return true
+		}
+		// それ以外はヘッダ行でない
+		return false
+	}
+
+	// Excel Macro: calcHeaderLevels levels, headerLevels
+	// ヘッダレベルを計算する
+	// ヘッダレベルとは、直近の親になるヘッダ行のレベルのこと
+	headerLevels := make(map[int]int, row2-row1+1) // 各行のヘッダレベル
+
+	for r := row1; r <= row2; r++ {
+		if isHeaderRow(r, levels) {
+			// ヘッダ行なら、レベルと同じ
+			headerLevels[r] = levels[r]
+		} else {
+			// ヘッダ行でないなら、レベル - 1
+			if levels[r] >= 1 {
+				headerLevels[r] = levels[r] - 1
+			} else {
+				// level=0 なら 0
+				headerLevels[r] = 0
+			}
+		}
+	} // for r
+
+	for r := row1; r <= row2; r++ {
+		cell1Col := col1     // 結合のために topleft の列番号を記録
+		isTopBorder := false // 罫線 (上) が必要なら true
+		for c := col1; c <= col2; c++ {
+			nColumns := c - col1 + 1
+			cell, err := excelize.CoordinatesToCellName(c, r)
+			if err != nil {
+				return err
+			}
+			hasVal, err := e.HasVal(c, r)
+			if err != nil {
+				return err
+			}
+			if nColumns <= levels[r] || hasVal {
+				// 列数がレベルに達していないか、何か値があるとき
+				if c > col1 {
+					// TODO: 左のセルが "■□●○" でない場合、
+					// 左に縦線を実線で引く
+					if err := e.SetStyleForCell(
+						cell, NewStyle(b1L)); err != nil {
+						return err
+					}
+				}
+
+				// セルをマージ
+				if cell1Col+1 <= c {
+					cell1, err := excelize.CoordinatesToCellName(cell1Col, r)
+					if err != nil {
+						return err
+					}
+					cell2, err := excelize.CoordinatesToCellName(c-1, r)
+					if err != nil {
+						return err
+					}
+					err = e.f.MergeCell(e.sheet, cell1, cell2)
+					if err != nil {
+						return err
+					}
+				} // if cell1Col+1 <= c
+				cell1Col = c
+			} // if nColumns <= levels[r] || hasVal
+			if isTopBorder || hasVal {
+				// セルに値が存在したら、罫線 (上) を実線で引く
+				if err := e.SetStyleForCell(cell, NewStyle(b1T)); err != nil {
+					return err
+				}
+				isTopBorder = true
+			}
+			// 各レベルのヘッダに色を塗る
+			if isHeaderRow(r, levels) && nColumns > headerLevels[r] {
+				err := e.SetStyleForCell(
+					cell, NewStyle(levelColor[headerLevels[r]]))
+				if err != nil {
+					return err
+				}
+			} else if nColumns <= headerLevels[r] { // if isHeaderRow
+				err := e.SetStyleForCell(
+					cell, NewStyle(levelColor[nColumns]))
+				if err != nil {
+					return err
+				}
+			} // if isHeaderRow
+			// 最終列ならセルをマージ
+			if c == col2 && cell1Col <= c {
+				cell1, err := excelize.CoordinatesToCellName(cell1Col, r)
+				if err != nil {
+					return err
+				}
+				err = e.f.MergeCell(e.sheet, cell1, cell)
+				if err != nil {
+					return err
+				}
+			}
+		} // for c
+	} // for r
+
+	// 外枠を太線で引く
+	if err := e.drawOuterBorders(col1, row1, col2, row2); err != nil {
+		return nil
+	}
+	return nil
+}
+
+// admonitionBorders applies borders to a specified cell range
+// for different types of admonitions.
+// Supports warning, note, and info styles with customizable border types.
 func (e *Excel) admonitionBorders(borderType TomatoBorderType,
 	col1, row1, col2, row2 int) error {
-	// TODO
+	// TODO: 精査する
+
+	// 全てのセルに適用するスタイルを設定する
+	if err := e.setStyleBorders(col1, row1, col2, row2); err != nil {
+		return err
+	}
+
+	// 各行をマージ
+	for r := row1; r <= row2; r++ {
+		cell1, err := excelize.CoordinatesToCellName(col1, r)
+		if err != nil {
+			return err
+		}
+		cell2, err := excelize.CoordinatesToCellName(col2, r)
+		if err != nil {
+			return err
+		}
+		err = e.f.MergeCell(e.sheet, cell1, cell2)
+		if err != nil {
+			return err
+		}
+	} // for r
+
+	// 1行目のヘッダを作成
+	cell1, err := excelize.CoordinatesToCellName(col1, row1)
+	if err != nil {
+		return err
+	}
+	var value string
+	var color cellStyle
+	switch borderType {
+	case TBorderCaution:
+		value = "警告:"
+		color = fillCaution
+	case TBorderNote:
+		value = "注意:"
+		color = fillNote
+	case TBorderInfo:
+		value = "ヒント:"
+		color = fillHint
+	default:
+		return fmt.Errorf(
+			"failed to draw admonition borders: unsupported border type '%v'",
+			borderType)
+	}
+	if err := e.f.SetCellStr(e.sheet, cell1, value); err != nil {
+		return err
+	}
+	if err := e.SetStyleForCell(cell1, NewStyle(fontBold)); err != nil {
+		return err
+	}
+
+	// 1行目に背景色を付ける
+	cell2, err := excelize.CoordinatesToCellName(col2, row1)
+	if err != nil {
+		return err
+	}
+	if err := e.SetStyleForCellRange(
+		cell1, cell2, NewStyle(color)); err != nil {
+		return err
+	}
+
+	// 外枠を細線で引く
+	cell2, err = excelize.CoordinatesToCellName(col2, row2)
+	if err != nil {
+		return err
+	}
+	if err := e.DrawBorders(
+		cell1, cell2, BorderContinuousWeight1); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -770,7 +1129,6 @@ func (e *Excel) MarkHeader(headerLevel int) error {
 
 // h1H2H3 is a helper function used by the H1, H2, and H3 functions.
 func (e *Excel) h1H2H3(title string, level int) error {
-	e.Col = 1
 	cell, err := excelize.CoordinatesToCellName(e.Col, e.Row)
 	if err != nil {
 		return err
@@ -781,7 +1139,6 @@ func (e *Excel) h1H2H3(title string, level int) error {
 	if err := e.MarkHeader(level); err != nil {
 		return err
 	}
-	e.Row++
 
 	return nil
 }
@@ -792,19 +1149,148 @@ func (e *Excel) h1H2H3(title string, level int) error {
 //
 // Example:
 //
-//	LF().H1("これはレベル1のヘッダ")
-//	LF().H2("これはレベル2のヘッダ")
-//	LF().H3("これはレベル3のヘッダ")
+//	e.H1("これはレベル1のヘッダ")
 func (e *Excel) H1(title string) error {
-	return e.h1H2H3(title, 1)
+	e.Col = 1
+	err := e.h1H2H3(title, 1)
+	e.Row++
+	return err
 }
 
 // H2 creates a level 2 header and sets the specified title in the cell.
+// Before setting the header, CR().LF(2) executes.
+// After setting the header, LF() executes.
+//
+// Example:
+//
+//	e.H2("これはレベル2のヘッダ")
 func (e *Excel) H2(title string) error {
-	return e.h1H2H3(title, 2)
+	e.Col, e.Row = 1, e.Row+2
+	err := e.h1H2H3(title, 2)
+	e.Row++
+	return err
 }
 
 // H3 creates a level 3 header and sets the specified title in the cell.
+// Before setting the header, CR().LF(2) executes.
+// After setting the header, LF() executes.
+//
+// Example:
+//
+//	e.H3("これはレベル3のヘッダ")
 func (e *Excel) H3(title string) error {
-	return e.h1H2H3(title, 3)
+	e.Col, e.Row = 1, e.Row+2
+	err := e.h1H2H3(title, 3)
+	e.Row++
+	return err
+}
+
+// WriteCaut writes a caution message.
+func (e *Excel) WriteCaut(lines []string) error {
+	e.CR(2).LF()
+	cell1, err := e.Cell()
+	if err != nil {
+		return err
+	}
+	for _, s := range lines {
+		if err := e.LF().SetVal(s); err != nil {
+			return err
+		}
+	}
+	cell2, err := e.CR(maxRightCellNumber).Cell()
+	if err != nil {
+		return err
+	}
+	if err := e.DrawBorders2(cell1, cell2, TBorderCaution); err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteNote writes a note message.
+func (e *Excel) WriteNote(lines []string) error {
+	e.CR(2).LF()
+	cell1, err := e.Cell()
+	if err != nil {
+		return err
+	}
+	for _, s := range lines {
+		if err := e.LF().SetVal(s); err != nil {
+			return err
+		}
+	}
+	cell2, err := e.CR(maxRightCellNumber).Cell()
+	if err != nil {
+		return err
+	}
+	if err := e.DrawBorders2(cell1, cell2, TBorderNote); err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteNote writes a info message.
+func (e *Excel) WriteInfo(lines []string) error {
+	e.CR(2).LF()
+	cell1, err := e.Cell()
+	if err != nil {
+		return err
+	}
+	for _, s := range lines {
+		if err := e.LF().SetVal(s); err != nil {
+			return err
+		}
+	}
+	cell2, err := e.CR(maxRightCellNumber).Cell()
+	if err != nil {
+		return err
+	}
+	if err := e.DrawBorders2(cell1, cell2, TBorderInfo); err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteDF writes DataFrame.
+// Default border type is TBorderHHeader.
+//
+// Example:
+//
+//	err := e.WriteDF(df)
+//	err := e.WriteDF(df, TBorderHHeaderG)
+//	err := e.WriteDF(df, TBorderVHeader)
+func (e *Excel) WriteDF(df *dataframe.DataFrame,
+	borderType ...TomatoBorderType) error {
+	if df == nil {
+		return errors.New("invalid input: the provided DataFrame is nil")
+	}
+	bType := TBorderHHeader
+	if len(borderType) > 0 {
+		bType = borderType[0]
+	}
+	switch bType {
+	case TBorderHHeader, TBorderHHeaderG, TBorderVHeader:
+		// valid cases; no action needed
+	default:
+		return fmt.Errorf("invalid border type: %v", bType)
+	}
+	cell1, _ := e.CR(2).LF().Cell()
+	for _, h := range df.Headers {
+		c, _ := excelize.ColumnNameToNumber(h.ColumnName)
+		e.CR(c).SetVal(h.Name)
+	}
+	for _, values := range df.Records {
+		e.LF()
+		for i, h := range df.Headers {
+			e.CR(h.Col).SetVal(values[i])
+			i++
+		}
+	}
+	e.Col = maxRightCellNumber
+	cell2, _ := e.Cell()
+	if err := e.DrawBorders2(cell1, cell2, bType); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -139,6 +139,26 @@ func (e *Excel) SaveAndClose() error {
 				e.sheet, err)
 		}
 	}
+	if _, err := e.f.GetSheetIndex("目次"); err == nil {
+		// シート「目次」がある場合、目次を作成する
+		e.sheet = "目次"
+		e.Col, e.Row = 10, 5
+		if err := e.MakeTOC(); err != nil {
+			return fmt.Errorf("error creating TOC on '%s': %v", e.sheet, err)
+		}
+		if err := e.applyCellStyle(); err != nil {
+			return fmt.Errorf("operation failed on the previous sheet: %s: %w",
+				e.sheet, err)
+		}
+	}
+	if _, err := e.f.GetSheetIndex("表紙"); err == nil {
+		// シート「表紙」がある場合、アクティブにする
+		e.sheet = "表紙"
+		if err := e.SetActiveSheet(); err != nil {
+			return fmt.Errorf("failed to activate sheet '%s': %v",
+				e.sheet, err)
+		}
+	}
 	if err := e.f.SaveAs(e.book); err != nil {
 		return fmt.Errorf(
 			"cannot save excel book: %s: %w",
@@ -294,6 +314,38 @@ func (e *Excel) SetRow(row any) error {
 		return fmt.Errorf("failed to set the row data: %w", err)
 	}
 	return nil
+}
+
+// GetVal gets value as string in the specified cell.
+func (e *Excel) GetVal(col, row int) (string, error) {
+	cell, err := excelize.CoordinatesToCellName(col, row)
+	if err != nil {
+		return "", fmt.Errorf(
+			"failed to convert coordinates (%d, %d) to cell name: %w",
+			col, row, err)
+	}
+	value, err := e.f.GetCellValue(e.sheet, cell)
+	if err != nil {
+		return "", fmt.Errorf(
+			"failed to get cell value at %s: %w", cell, err)
+	}
+	return value, nil
+}
+
+// HasVal checks if the specified cell contains a value.
+func (e *Excel) HasVal(col, row int) (bool, error) {
+	cell, err := excelize.CoordinatesToCellName(col, row)
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to convert coordinates (%d, %d) to cell name: %w",
+			col, row, err)
+	}
+	value, err := e.f.GetCellValue(e.sheet, cell)
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to get cell value at %s: %w", cell, err)
+	}
+	return value != "", nil
 }
 
 // GetLastColumnNumber returns the last column number in the specified sheet.

@@ -98,6 +98,13 @@ const (
 	bdT // top border
 	bdR // right border
 	bdB // bottom border
+
+	// Dash border Style
+	// Index=3 Name=Dash Weight=1
+	bdashL // left border
+	bdashT // top border
+	bdashR // right border
+	bdashB // bottom border
 )
 
 type BorderType int
@@ -111,7 +118,7 @@ const (
 	// 2     | Continuous    | 2      | -----------
 	BorderContinuousWeight2
 	// 3     | Dash          | 1      | - - - - - -
-	// BorderDashWeight1
+	BorderDashWeight1
 	// 4     | Dot           | 1      | . . . . . .
 	// BorderDotWeight1
 	// 5     | Continuous    | 3      | -----------
@@ -357,10 +364,10 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 	// 今回引数で追加したスタイルから先にチェックする
 
 	const (
-		bLAll cellStyle = b1L | b2L | b3L | bdL
-		bTAll           = b1T | b2T | b3T | bdT
-		bRAll           = b1R | b2R | b3R | bdR
-		bBAll           = b1B | b2B | b3B | bdB
+		bLAll cellStyle = b1L | b2L | b3L | bdL | bdashL
+		bTAll           = b1T | b2T | b3T | bdT | bdashT
+		bRAll           = b1R | b2R | b3R | bdR | bdashR
+		bBAll           = b1B | b2B | b3B | bdB | bdashB
 	)
 
 	// Border left
@@ -370,7 +377,7 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 		if add_style&bLAll != 0 {
 			style_copy = add_style
 		}
-		for _, s := range []cellStyle{b1L, b2L, b3L, bdL} {
+		for _, s := range []cellStyle{b1L, b2L, b3L, bdL, bdashL} {
 			if style_copy&s != 0 {
 				style |= s
 				break
@@ -385,7 +392,7 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 		if add_style&bTAll != 0 {
 			style_copy = add_style
 		}
-		for _, s := range []cellStyle{b1T, b2T, b3T, bdT} {
+		for _, s := range []cellStyle{b1T, b2T, b3T, bdT, bdashT} {
 			if style_copy&s != 0 {
 				style |= s
 				break
@@ -400,7 +407,7 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 		if add_style&bRAll != 0 {
 			style_copy = add_style
 		}
-		for _, s := range []cellStyle{b1R, b2R, b3R, bdR} {
+		for _, s := range []cellStyle{b1R, b2R, b3R, bdR, bdashR} {
 			if style_copy&s != 0 {
 				style |= s
 				break
@@ -415,7 +422,7 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 		if add_style&bBAll != 0 {
 			style_copy = add_style
 		}
-		for _, s := range []cellStyle{b1B, b2B, b3B, bdB} {
+		for _, s := range []cellStyle{b1B, b2B, b3B, bdB, bdashB} {
 			if style_copy&s != 0 {
 				style |= s
 				break
@@ -440,6 +447,11 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 		{b2T, "top", 2},
 		{b2R, "right", 2},
 		{b2B, "bottom", 2},
+
+		{bdashL, "left", 3},
+		{bdashT, "top", 3},
+		{bdashR, "right", 3},
+		{bdashB, "bottom", 3},
 
 		{b3L, "left", 5},
 		{b3T, "top", 5},
@@ -569,8 +581,9 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 	case BorderContinuousWeight1,
 		BorderContinuousWeight2,
 		BorderContinuousWeight3,
-		BorderDoubleWeight3:
-		// 何もしない
+		BorderDoubleWeight3,
+		BorderDashWeight1:
+		// do nothing
 	default:
 		return fmt.Errorf("unsupported border type: %d", borderType)
 	}
@@ -599,6 +612,7 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 		return errors.New("cell range must consist of multiple cells")
 	case hRow == vRow:
 		// Single row: draw top border only
+		// TODO: 1行上のセルの下罫線も引く
 		var style cellStyle
 		switch borderType {
 		case BorderContinuousWeight1:
@@ -609,6 +623,8 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 			style = style.add(b3T)
 		case BorderDoubleWeight3:
 			style = style.add(bdT)
+		case BorderDashWeight1:
+			style = style.add(bdashT)
 		}
 		if err := e.SetStyleForCellRange(
 			topLeftCell, bottomRightCell, style); err != nil {
@@ -616,6 +632,7 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 		}
 	case hCol == vCol:
 		// Single column: draw left border only
+		// TODO: 1列左のセルの右罫線も引く
 		var style cellStyle
 		switch borderType {
 		case BorderContinuousWeight1:
@@ -626,6 +643,8 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 			style = style.add(b3L)
 		case BorderDoubleWeight3:
 			style = style.add(bdL)
+		case BorderDashWeight1:
+			style = style.add(bdashL)
 		}
 		if err := e.SetStyleForCellRange(
 			topLeftCell, bottomRightCell, style); err != nil {
@@ -651,6 +670,8 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 						style = style.add(b3T)
 					case BorderDoubleWeight3:
 						style = style.add(bdT)
+					case BorderDashWeight1:
+						style = style.add(bdashT)
 					}
 				case vRow:
 					switch borderType {
@@ -662,6 +683,8 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 						style = style.add(b3B)
 					case BorderDoubleWeight3:
 						style = style.add(bdB)
+					case BorderDashWeight1:
+						style = style.add(bdashB)
 					}
 				}
 				if err := e.SetStyleForCell(cell, style); err != nil {
@@ -679,6 +702,8 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 						style = style.add(b3L)
 					case BorderDoubleWeight3:
 						style = style.add(bdL)
+					case BorderDashWeight1:
+						style = style.add(bdashL)
 					}
 				case vCol:
 					switch borderType {
@@ -690,6 +715,8 @@ func (e *Excel) DrawBorders(topLeftCell, bottomRightCell string,
 						style = style.add(b3R)
 					case BorderDoubleWeight3:
 						style = style.add(bdR)
+					case BorderDashWeight1:
+						style = style.add(bdashR)
 					}
 				}
 				if err := e.SetStyleForCell(cell, style); err != nil {

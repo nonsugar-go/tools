@@ -3,8 +3,12 @@ package excel
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/nonsugar-go/tools/excel/dataframe"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -75,85 +79,14 @@ func TestExcel_SaveAndClose(t *testing.T) {
 	}()
 
 	// シート「表紙」
-	if err := e.NewSheet("「表紙」の例", SheetTypeCover); err != nil {
+	if err := e.NewSheet("Excel モジュールのテスト",
+		SheetTypeCover); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
 	}
 
-	// シート「サンプル テスト」
-	if err := e.NewSheet("サンプル テスト"); err != nil {
+	// シート「目次」
+	if err := e.NewSheet("目次", SheetTypeTOC); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
-	}
-	tests := []struct {
-		name string
-		x, y int
-	}{
-		{name: "(3, 3)", x: 3, y: 3},
-		{name: "(4, 6)", x: 4, y: 6},
-	}
-	for _, tt := range tests {
-		e.Col = tt.x
-		e.Row = tt.y
-		err := e.SetRow(&[]any{
-			fmt.Sprintf("(%d, %d)", e.Col, e.Row),
-			"1", nil, 2})
-		if err != nil {
-			t.Errorf("SetRow: %s: want no error, but %v", tt.name, err)
-		}
-	}
-
-	// シート「人物リスト」
-	if err := e.NewSheet("人物リスト"); err != nil {
-		t.Errorf("NewSheet: want no error, but: %v", err)
-	}
-	if err := e.SetActiveSheet(); err != nil {
-		t.Errorf("NewActiveSheet: want no error, but: %v", err)
-	}
-	if err := e.SetHeader([]Header{
-		{"No", 0},
-		{"姓", 6},
-		{"名", 0},
-		{"人物を説明することば", 0},
-	}); err != nil {
-		t.Errorf("SetHader: want no error, but %v", err)
-	}
-	rows := [][]any{
-		{1, "大谷", "翔平", "ベースボール プレイヤー"},
-		{2, "鈴木", "一郎", "殿堂入り"},
-		{3, "野茂", "英雄", "トルネード投法"},
-	}
-	for _, row := range rows {
-		if err := e.LF().SetRow(&row); err != nil {
-			t.Errorf("SetRow: want no error, but %v", err)
-		}
-	}
-	if err := e.AddTable("Table1"); err != nil {
-		t.Errorf("AddTable: want no error, but %v", err)
-	}
-
-	// シート「設定」
-	if err := e.NewSheet("「設定」の例", SheetTypeNormal); err != nil {
-		t.Errorf("NewSheet: want no error, but: %v", err)
-	}
-	if err := e.SetVal("設定"); err != nil {
-		t.Errorf("SetVal: want no error, but: %v", err)
-	}
-	if err := e.MarkHeader(2); err != nil {
-		t.Errorf("MarkHeader: want no error, but: %v", err)
-	}
-	if err := e.SetVal("セル スタイル", 1, 7); err != nil {
-		t.Errorf("SetVal: want no error, but: %v", err)
-	}
-	if err := e.MarkHeader(3); err != nil {
-		t.Errorf("MarkHeader: want no error, but: %v", err)
-	}
-	e.CR(2).LF(2)
-	if err := e.SetRow(&[]any{
-		"cellStyleIDs", nil, nil, nil, nil, e.cellStyleIDs}); err != nil {
-		t.Errorf("SetRow: want no error, but: %v", err)
-	}
-	if err := e.LF().SetRow(&[]any{
-		"cellStyleMap", nil, nil, nil, nil, e.cellStyleMap}); err != nil {
-		t.Errorf("SetRow: want no error, but: %v", err)
 	}
 
 	// シート「標準」
@@ -303,6 +236,110 @@ func TestExcel_SaveAndClose(t *testing.T) {
 			t.Errorf("SetVal: want no error, but: %v", err)
 		}
 	}
+	// シート「罫線の例」
+	_ = e.NewSheet("罫線の例", SheetTypeNormal)
+	_ = e.H2("各種罫線の例")
+
+	if err := e.WriteDF((*dataframe.DataFrame)(nil)); err == nil {
+		t.Errorf("WriteDF: want error, but: %v", err)
+	}
+	if err := e.WriteDF(
+		dataframe.New("B", "ID"), TBorderSchedule); err == nil {
+		t.Errorf("WriteDF: want error, but: %v", err)
+	}
+
+	_ = e.H3("セルの書式設定: デフォルト値")
+	df := dataframe.New(
+		"B", "タブ", "E", "大項目", "I", "小項目", "Q", "値", "U", "備考").
+		Add("配置", "文字の配置", "横位置", "標準", "").
+		Add("配置", "文字の配置", "縦位置", "中央揃え", "").
+		Add("配置", "文字の制御", "折り返して全体を表示する", "false", "").
+		Add("配置", "文字の制御", "縮小して全体を表示する", "false", "").
+		Add("配置", "文字の制御", "セルを結合する", "false", "")
+	if err := e.WriteDF(df); err != nil {
+		t.Errorf("WriteDF: want no error, but: %v", err)
+	}
+
+	_ = e.H3("セルの書式設定: 水平ヘッダのある表")
+	df = dataframe.New(
+		"B", "タブ", "E", "大項目", "I", "小項目", "Q", "値", "U", "備考").
+		Add("配置", "文字の配置", "横位置", "標準", "ヘッダ部分は「中央揃え」").
+		Add("配置", "文字の配置", "縦位置", "中央揃え", "").
+		Add("配置", "文字の制御", "折り返して全体を表示する", "false", "").
+		Add("配置", "文字の制御", "縮小して全体を表示する", "true", "").
+		Add("配置", "文字の制御", "セルを結合する", "true", "")
+	if err := e.WriteDF(df, TBorderHHeader); err != nil {
+		t.Errorf("WriteDF: want no error, but: %v", err)
+	}
+
+	_ = e.H3("セルの書式設定: 垂直ヘッダのある表")
+	df = dataframe.New(
+		"B", "タブ", "E", "大項目", "I", "小項目", "Q", "値", "U", "備考").
+		Add("配置", "文字の配置", "横位置", "標準", "ヘッダ部分は「中央揃え」").
+		Add("配置", "文字の配置", "縦位置", "中央揃え", "").
+		Add("配置", "文字の制御", "折り返して全体を表示する", "false", "").
+		Add("配置", "文字の制御", "縮小して全体を表示する", "true", "").
+		Add("配置", "文字の制御", "セルを結合する", "true", "")
+	if err := e.WriteDF(df, TBorderVHeader); err != nil {
+		t.Errorf("WriteDF: want no error, but: %v", err)
+	}
+
+	_ = e.H3("セルの書式設定: 水平ヘッダのある表 (グループ対応)")
+	df = dataframe.New(
+		"B", "タブ", "E", "大項目", "I", "小項目", "Q", "値", "U", "備考").
+		Add("配置", "文字の配置", "横位置", "標準", "ヘッダ部分は「中央揃え」").
+		Add("", "", "縦位置", "中央揃え", "-").
+		Add("配置", "文字の制御", "折り返して全体を表示する", "false", "-").
+		Add("", "", "縮小して全体を表示する", "true", "-").
+		Add("", "", "セルを結合する", "true", "-")
+	if err := e.WriteDF(df, TBorderHHeaderG); err != nil {
+		t.Errorf("WriteDF: want no error, but: %v", err)
+	}
+
+	_ = e.H3("セルの書式設定: 入れ子構造の表")
+	cell1, _ := e.CR(2).LF().Cell()
+	_ = e.SetVal("タブ")
+	_ = e.CR(17).SetVal("配置")
+	_ = e.CR(3).LF().SetVal("文字の配置")
+	_ = e.CR(4).LF().SetVal("横位置")
+	_ = e.CR(17).SetVal("標準")
+	_ = e.CR(4).LF().SetVal("縦位置")
+	_ = e.CR(17).SetVal("中央揃え")
+	_ = e.CR(3).LF().SetVal("文字の制御")
+	_ = e.CR(4).LF().SetVal("折り返して全体を表示する")
+	_ = e.CR(17).SetVal("false")
+	_ = e.CR(4).LF().SetVal("縮小して全体を表示する")
+	_ = e.CR(17).SetVal("true")
+	_ = e.CR(4).LF().SetVal("セルを結合する")
+	_ = e.CR(17).SetVal("true")
+	e.Col = maxRightCellNumber
+	cell2, _ := e.Cell()
+	if err := e.DrawBorders2(cell1, cell2, TBorderNested); err != nil {
+		t.Errorf("DrawBorders2: want no error, but: %v", err)
+	}
+
+	_ = e.H2("注意")
+
+	_ = e.H3("警告の例")
+	if err := e.WriteCaut([]string{
+		"警告の例です。",
+		"特に気を付ける必要があることを記載します。"}); err != nil {
+		t.Errorf("WriteCaut: want no error, but: %v", err)
+	}
+
+	_ = e.H3("注意の例")
+	if err := e.WriteNote([]string{
+		"注意の例です。",
+		"注意すべき事項を記載します。"}); err != nil {
+		t.Errorf("WriteCaut: want no error, but: %v", err)
+	}
+
+	_ = e.H3("ヒント (TIPS) の例")
+	if err := e.WriteInfo([]string{
+		"ヒント (TIPS) の例です。",
+		"情報提供の目的で記載します。"}); err != nil {
+		t.Errorf("WriteCaut: want no error, but: %v", err)
+	}
 
 	// シート「スタイル」
 	if err := e.NewSheet("スタイル", SheetTypeNormal); err != nil {
@@ -324,26 +361,31 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		{"G7:I9 weight=7", "G7", "I9", BorderContinuousWeight2, false, fillGray3},
 		{"K7:M9 weight=7", "K7", "M9", BorderContinuousWeight3, false, fillGray3},
 		{"O7:Q9 double", "O7", "Q9", BorderDoubleWeight3, false, fillGray3},
+		{"S7:U9 dash", "S7", "U9", BorderDashWeight1, false, fillGray3},
 		// horizontal
 		{"C11:E11 weight=1", "C11", "E11", BorderContinuousWeight1, false, fillGray3},
 		{"G11:I11 weight=11", "G11", "I11", BorderContinuousWeight2, false, fillGray3},
 		{"K11:M11 weight=11", "K11", "M11", BorderContinuousWeight3, false, fillGray3},
 		{"O11:Q11 double", "O11", "Q11", BorderDoubleWeight3, false, fillGray3},
+		{"S11:U11 dash", "S11", "U11", BorderDashWeight1, false, fillGray3},
 		// vertical
 		{"C13:C16 weight=1", "C13", "C16", BorderContinuousWeight1, false, fillGray3},
 		{"G13:G16 weight=13", "G13", "G16", BorderContinuousWeight2, false, fillGray3},
 		{"K13:K16 weight=13", "K13", "K16", BorderContinuousWeight3, false, fillGray3},
 		{"O13:O16 double", "O13", "O16", BorderDoubleWeight3, false, fillGray3},
+		{"S13:U16 dash", "S13", "U16", BorderDashWeight1, false, fillGray3},
 		// nested boxes
 		{"C20:Z30 weight=1", "C20", "Z30", BorderContinuousWeight1, false, fillGray1},
 		{"D21:Y29 weight=1", "D21", "Y29", BorderContinuousWeight2, false, fillGray2},
 		{"E22:X28 weight=13", "E22", "X28", BorderContinuousWeight3, false, fillGray3},
 		{"F23:W27 double", "F23", "W27", BorderDoubleWeight3, false, fillGray3},
+		{"G24:V26 dash", "G24", "V26", BorderDashWeight1, false, fillGray4},
 
 		{"G23:V27 weight=1", "G23", "V27", BorderContinuousWeight1, false, fillRed},
 		{"H22:U28 weight=1", "H22", "U28", BorderContinuousWeight2, false, fillYellow},
 		{"I21:T29 weight=13", "I21", "T29", BorderContinuousWeight3, false, fillLightBlue},
 		{"J20:S30 double", "J20", "S30", BorderDoubleWeight3, false, fillPurple},
+		{"K19:R31 dash", "K19", "R31", BorderDashWeight1, false, fillOrange},
 	}
 	for _, tt := range borderTests {
 		err := e.DrawBorders(tt.cell1, tt.cell2, tt.typ)
@@ -455,9 +497,88 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		}
 	}
 
-	// シート「目次」
-	if err := e.NewSheet("目次", SheetTypeTOC); err != nil {
+	// シート「セルスタイルのデータ」
+	_ = e.NewSheet("セルスタイルのデータ", SheetTypeNormal)
+	_ = e.H2("セルスタイルのデータ")
+	_ = e.H3("cellStyleIDs")
+	df = dataframe.New("B", "Key", "Q", "cellStyleIDs")
+	keys := make([]cellStyle, 0, len(e.cellStyleIDs))
+	for k := range e.cellStyleIDs {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return uint64(keys[i]) < uint64(keys[j])
+	})
+	for _, k := range keys {
+		v := e.cellStyleIDs[k]
+		df.Add(strconv.FormatUint(uint64(k), 10), strconv.Itoa(v))
+	}
+	if err := e.WriteDF(df); err != nil {
+		t.Errorf("WriteDF: want no error, but: %v", err)
+	}
+	_ = e.H3("cellStyleMap")
+	df = dataframe.New("B", "Key", "Q", "cellStyleMap")
+	keys2 := make([]string, 0, len(e.cellStyleMap))
+	for k := range e.cellStyleMap {
+		keys2 = append(keys2, k)
+	}
+	sort.Strings(keys2)
+	for _, k := range keys2 {
+		v := e.cellStyleMap[k]
+		df.Add(k, strconv.FormatUint(uint64(v), 10))
+	}
+	if err := e.WriteDF(df); err != nil {
+		t.Errorf("WriteDF: want no error, but: %v", err)
+	}
+
+	// シート「サンプル テスト」
+	if err := e.NewSheet("サンプル テスト"); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
+	}
+	tests := []struct {
+		name string
+		x, y int
+	}{
+		{name: "(3, 3)", x: 3, y: 3},
+		{name: "(3, 4)", x: 3, y: 4},
+		{name: "(5, 5)", x: 5, y: 5},
+	}
+	for _, tt := range tests {
+		e.Col, e.Row = tt.x, tt.y
+		err := e.SetRow(&[]any{
+			fmt.Sprintf("(%d, %d)", e.Col, e.Row), "文字列", nil, -1, 3.14})
+		if err != nil {
+			t.Errorf("SetRow: %s: want no error, but %v", tt.name, err)
+		}
+	}
+
+	// シート「人物リスト」
+	if err := e.NewSheet("人物リスト"); err != nil {
+		t.Errorf("NewSheet: want no error, but: %v", err)
+	}
+	if err := e.SetActiveSheet(); err != nil {
+		t.Errorf("NewActiveSheet: want no error, but: %v", err)
+	}
+	if err := e.SetHeader([]Header{
+		{"No", 0},
+		{"姓", 7},
+		{"名", 7},
+		{"人物の説明", 24},
+	}); err != nil {
+		t.Errorf("SetHader: want no error, but %v", err)
+	}
+	rows := [][]any{
+		{1, "大谷", "翔平", "ベースボール プレイヤー"},
+		{2, "鈴木", "一郎", "殿堂入り"},
+		{3, "野茂", "英雄", "トルネード投法"},
+	}
+	for _, row := range rows {
+		if err := e.LF().SetRow(&row); err != nil {
+			t.Errorf("SetRow: want no error, but %v", err)
+		}
+	}
+	if err := e.AddTable("Table1"); err != nil {
+		t.Errorf("AddTable: want no error, but %v", err)
 	}
 }
 
@@ -509,7 +630,7 @@ func Test_CordinatesToCellName(t *testing.T) {
 	}
 }
 
-func TestExcelCell(t *testing.T) {
+func TestExcel_Cell(t *testing.T) {
 	tests := []struct {
 		name     string
 		col, row int
@@ -563,7 +684,7 @@ func TestExcelMakeHeader(t *testing.T) {
 	}
 }
 
-func TestExcelGetLastColumnNumberAndGetLastRowNumber(t *testing.T) {
+func TestExcel_GetLastColumnNumberAndGetLastRowNumber(t *testing.T) {
 	tests := []struct {
 		name     string
 		sheet    string
@@ -640,6 +761,71 @@ func TestRelCellNameToAbsCellName(t *testing.T) {
 		}
 		if got != tt.expected {
 			t.Errorf("%s: want %s, but %s",
+				tt.name, tt.expected, got)
+		}
+	}
+}
+
+func TestExcel_GetVal(t *testing.T) {
+	tests := []struct {
+		name     string
+		col, row int
+		value    any
+		expected string
+	}{
+		{"A1 Hello", 1, 1, "Hello", "Hello"},
+		{"B2 \"123\"", 2, 2, "123", "123"},
+		{"B3 ture", 2, 3, true, "TRUE"},
+		{"B4 false", 2, 4, false, "FALSE"},
+		{"C1 \"\"", 3, 1, "", ""},
+		{"C2 nil", 3, 2, nil, ""},
+	}
+
+	e, _ := New("dummy.xlsx")
+	defer e.Close()
+	_ = e.NewSheet("dummy")
+	for _, tt := range tests {
+		_ = e.SetVal(tt.value, tt.col, tt.row)
+		got, err := e.GetVal(tt.col, tt.row)
+		if err != nil {
+			t.Errorf("%s: want no error, but %v",
+				tt.name, err)
+		}
+		if got != tt.expected {
+			t.Errorf("%s: want %s, but %s",
+				tt.name, tt.expected, got)
+		}
+	}
+}
+
+func TestExcel_HasVal(t *testing.T) {
+	tests := []struct {
+		name     string
+		col, row int
+		value    any
+		expected bool
+	}{
+		{"A1 Hello", 1, 1, "Hello", true},
+		{"B2 \"123\"", 2, 2, "123", true},
+		{"B3 ture", 2, 3, true, true},
+		{"B4 false", 2, 4, false, true},
+		{"B5 time.Now()", 2, 5, time.Now(), true},
+		{"C1 \"\"", 3, 1, "", false},
+		{"C2 nil", 3, 2, nil, false},
+	}
+
+	e, _ := New("dummy.xlsx")
+	defer e.Close()
+	_ = e.NewSheet("dummy")
+	for _, tt := range tests {
+		_ = e.SetVal(tt.value, tt.col, tt.row)
+		got, err := e.HasVal(tt.col, tt.row)
+		if err != nil {
+			t.Errorf("%s: want no error, but %v",
+				tt.name, err)
+		}
+		if got != tt.expected {
+			t.Errorf("%s: want %t, but %t",
 				tt.name, tt.expected, got)
 		}
 	}
