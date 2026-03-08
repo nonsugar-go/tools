@@ -23,8 +23,9 @@ const _CellType_name = "UnsetBoolDateErrorFormulaInlineStringNumberSharedString"
 var _CellType_index = [...]uint8{0, 5, 9, 13, 18, 25, 37, 43, 55}
 
 func (i CellType) String() string {
-	if i >= CellType(len(_CellType_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_CellType_index)-1 {
 		return "CellType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _CellType_name[_CellType_index[i]:_CellType_index[i+1]]
+	return _CellType_name[_CellType_index[idx]:_CellType_index[idx+1]]
 }
