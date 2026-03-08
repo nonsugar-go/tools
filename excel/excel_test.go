@@ -341,6 +341,16 @@ func TestExcel_SaveAndClose(t *testing.T) {
 		t.Errorf("WriteCaut: want no error, but: %v", err)
 	}
 
+	_ = e.H3("コードの例")
+	if err := e.WriteCodeBlock([]string{
+		"int main(int argc, char **argv) {",
+		"   printf(\"%s\\n\", argv[0]",
+		"return 0;",
+		"}",
+	}); err != nil {
+		t.Errorf("WriteCodeBlock: want no error, but: %v", err)
+	}
+
 	// シート「スタイル」
 	if err := e.NewSheet("スタイル", SheetTypeNormal); err != nil {
 		t.Errorf("NewSheet: want no error, but: %v", err)
@@ -496,6 +506,16 @@ func TestExcel_SaveAndClose(t *testing.T) {
 			t.Errorf("SetStyle: want no error, but: %v", err)
 		}
 	}
+
+	_ = e.H2("フォントのファミリー")
+	e.CR(2).LF()
+	e.SetVal("あいうえおアイウエオ東京　大阪　名古屋　札幌　横浜 Yu Gothic")
+	e.SetStyle(NewStyle(fontFamilyMSGothic))
+	e.SetStyle(NewStyle(fontFamilyYuGothic))
+	e.CR(2).LF(2)
+	e.SetVal("あいうえおアイウエオ東京　大阪　名古屋　札幌　横浜 MS Gothic")
+	e.SetStyle(NewStyle(fontFamilyYuGothic))
+	e.SetStyle(NewStyle(fontFamilyMSGothic))
 
 	// シート「セルスタイルのデータ」
 	_ = e.NewSheet("セルスタイルのデータ", SheetTypeNormal)

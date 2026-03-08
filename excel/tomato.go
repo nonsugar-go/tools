@@ -76,7 +76,7 @@ func (e *Excel) pageSetting(sheetType SheetType, title string) error {
 		if err := e.SetStyle(NewStyle(fontSize20, fontBold,
 			// 配置
 			alignmentHorizontalCenter, // 横位置=中央揃え
-			alignmentVerticalCenterl,  // 縦位置=中央揃え
+			alignmentVerticalCenter,   // 縦位置=中央揃え
 			alignmentWrapText,         // 文字の制御: 折り返して全体を表示する
 		)); err != nil {
 			return err
@@ -272,7 +272,7 @@ func (e *Excel) DrawBorders2(topLeftCell, bottomRightCell string,
 		//     Set cell2 = cell2.Offset(1, 0)
 		//     Range(cell1, cell2).Select
 		// End If
-		// teleTypeBorders
+		return e.teleTypeBorders(c1, r1, c2, r2)
 	case TBorderBullet:
 		// TODO:
 		// ElseIf InStr(1, "BbＢｂ", Left$(msgResult, 1), vbTextCompare) <> 0 Then
@@ -307,7 +307,7 @@ func (e *Excel) setStyleBorders(col1, row1, col2, row2 int) error {
 	}
 	if err := e.SetStyleForCellRange(cell1, cell2, NewStyle(
 		// 文字の配置 > 縦位置: 中央揃え
-		alignmentVerticalCenterl,
+		alignmentVerticalCenter,
 		// 文字の制御 > 縮小して全体を表示する: true
 		alignmentShrinkToFit,
 	)); err != nil {
@@ -924,6 +924,38 @@ func (e *Excel) admonitionBorders(borderType TomatoBorderType,
 	return nil
 }
 
+// TeleTypeBorders function creates text with a fixed-width font (monospaced)
+// and surrounds it with borders
+// TeleType文字 (等幅フォント) にし、罫線で囲う描画マクロ
+func (e *Excel) teleTypeBorders(col1, row1, col2, row2 int) error {
+	// TeleType 文字にする, ttFont = "ＭＳ ゴシック"
+	// フォントサイズを変更する, ttFontSize = 10 (defaultFontSize = 10)
+	// 行間を変更する, ttRowHeight = 13.5 (defaultRowHeight = 13.5)
+	cell1, err := excelize.CoordinatesToCellName(col1, row1)
+	if err != nil {
+		return err
+	}
+	cell2, err := excelize.CoordinatesToCellName(col2, row2)
+	if err != nil {
+		return err
+	}
+	if err := e.SetStyleForCellRange(
+		cell1, cell2, NewStyle(
+			fontFamilyMSGothic,
+			fontSize10,
+			alignmentVerticalCenter)); err != nil {
+		return err
+	}
+
+	// 外枠を細線で引く
+	if err := e.DrawBorders(
+		cell1, cell2, BorderContinuousWeight1); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // MakeTOC generates a table of contents for a document.
 func (e *Excel) MakeTOC() error {
 	type headersInfo struct {
@@ -1246,6 +1278,29 @@ func (e *Excel) WriteInfo(lines []string) error {
 		return err
 	}
 	if err := e.DrawBorders2(cell1, cell2, TBorderInfo); err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteCodeBlock writes a code block.
+func (e *Excel) WriteCodeBlock(lines []string) error {
+	e.CR(2).LF()
+	cell1, err := e.Cell()
+	if err != nil {
+		return err
+	}
+	e.CR(3)
+	for _, s := range lines {
+		if err := e.LF().SetVal(s); err != nil {
+			return err
+		}
+	}
+	cell2, err := e.CR(maxRightCellNumber).LF().Cell()
+	if err != nil {
+		return err
+	}
+	if err := e.DrawBorders2(cell1, cell2, TBorderCode); err != nil {
 		return err
 	}
 	return nil

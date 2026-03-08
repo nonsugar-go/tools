@@ -13,9 +13,14 @@ type cellStyle uint64
 const (
 	styleNormal cellStyle = 0
 
+	// Font family
+	fontFamilyYuGothic cellStyle = 1 << iota // 游ゴシック
+	fontFamilyMSGothic                       // ＭＳ ゴシック
+
 	// Font sizes
-	fontSize12 cellStyle = 1 << iota // 12
-	fontSize20                       // 20
+	fontSize10 // 10
+	fontSize12 // 12
+	fontSize20 // 20
 
 	// Font styles
 	fontBold
@@ -68,7 +73,7 @@ const (
 	// Alignment 配置
 	alignmentHorizontalCenter // 横位置=中央揃え "center"
 	alignmentShrinkToFit      // 文字の制御: 縮小して全体を表示する=true
-	alignmentVerticalCenterl  // 縦位置=中央揃え "center"
+	alignmentVerticalCenter   // 縦位置=中央揃え "center"
 	alignmentWrapText         // 文字の制御: 折り返して全体を表示する=true
 
 	// Thin border styles
@@ -171,20 +176,49 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 		return nil
 	}
 
+	// フォントのファミリーについて排他処理を実施
+	// 今回引数で追加したスタイルから先にチェックする
+
+	const (
+		fontFamilyAll cellStyle = fontFamilyYuGothic | fontFamilyMSGothic
+	)
+
+	style_copy := style
+	if style&fontFamilyAll != 0 {
+		style &^= fontFamilyAll
+		if add_style&fontFamilyAll != 0 {
+			style_copy = add_style
+		}
+		for _, s := range []cellStyle{fontFamilyYuGothic, fontFamilyMSGothic} {
+			if style_copy&s != 0 {
+				style |= s
+				break
+			}
+		}
+	}
+
+	// Font family
+	fontFamily := defaultFont
+	if style&fontFamilyYuGothic != 0 {
+		fontFamily = "游ゴシック"
+	} else if style&fontFamilyMSGothic != 0 {
+		fontFamily = "ＭＳ ゴシック"
+	}
+
 	// フォントのサイズについて排他処理を実施
 	// 今回引数で追加したスタイルから先にチェックする
 
 	const (
-		fontSizeAll cellStyle = fontSize12 | fontSize20
+		fontSizeAll cellStyle = fontSize10 | fontSize12 | fontSize20
 	)
 
-	style_copy := style
+	style_copy = style
 	if style&fontSizeAll != 0 {
 		style &^= fontSizeAll
 		if add_style&fontSizeAll != 0 {
 			style_copy = add_style
 		}
-		for _, s := range []cellStyle{fontSize12, fontSize20} {
+		for _, s := range []cellStyle{fontSize10, fontSize12, fontSize20} {
 			if style_copy&s != 0 {
 				style |= s
 				break
@@ -194,7 +228,9 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 
 	// Font size
 	fontSize := e.fontSize
-	if style&fontSize12 != 0 {
+	if style&fontSize10 != 0 {
+		fontSize = 10
+	} else if style&fontSize12 != 0 {
 		fontSize = 12
 	} else if style&fontSize20 != 0 {
 		fontSize = 20
@@ -353,7 +389,7 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 	if style&alignmentShrinkToFit != 0 {
 		varAlignmentShrinkToFit = true
 	}
-	if style&alignmentVerticalCenterl != 0 {
+	if style&alignmentVerticalCenter != 0 {
 		varAlignmentVertical = "center"
 	}
 	if style&alignmentWrapText != 0 {
@@ -472,7 +508,8 @@ func (e *Excel) SetStyleForCell(cell string, style cellStyle) error {
 	id, err := e.f.NewStyle(
 		&excelize.Style{
 			Font: &excelize.Font{
-				Size: fontSize, Bold: bold, Color: fontColor,
+				Family: fontFamily, Size: fontSize, Bold: bold,
+				Color: fontColor,
 			},
 			Fill:   fill,
 			Border: border,
